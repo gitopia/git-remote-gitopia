@@ -10,7 +10,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
-	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	cosmoscryptoed "github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
+	cosmoscryptosecp "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/tx"
@@ -201,7 +202,9 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		&authType.BaseAccount{},
 		&authType.ModuleAccount{},
 	)
-	interfaceRegistry.RegisterImplementations(cryptotypes.PubKey, secp256k1.PubKey)
+	interfaceRegistry.RegisterInterface("cosmos.crypto.PubKey", (*cryptotypes.PubKey)(nil))
+	interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &cosmoscryptosecp.PubKey{})
+	interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &cosmoscryptoed.PubKey{})
 	marshaler := codec.NewProtoCodec(interfaceRegistry)
 	txCfg := authTx.NewTxConfig(marshaler, authTx.DefaultSignModes)
 
@@ -215,7 +218,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	msg := gitopiaTypes.NewMsgCreateBranch(address.String(), h.remoteRepositoryId, remoteRef, localCommitSHA.String())
 	txBuilder.SetMsgs(msg)
 
-	// txBuilder.SetGasLimit()
+	txBuilder.SetGasLimit(200000)
 
 	res, err := h.accountQueryClient.Account(context.Background(),
 		&authType.QueryAccountRequest{
@@ -227,25 +230,25 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", err
 	}
 
-	// sigV2 := signing.SignatureV2{
-	// 	PubKey: privKey.PubKey(),
-	// 	Data: &signing.SingleSignatureData{
-	// 		SignMode: txCfg.SignModeHandler().DefaultMode(),
-	// 		Signature: nil,
-	// 	},
-	// 	Sequence: acc.GetSequence(),
-	// }
-	// err = txBuilder.SetSignatures(sigV2)
-	// if err != nil {
-	// 	return "", err
-	// }
+	sigV2 := signing.SignatureV2{
+		PubKey: privKey.PubKey(),
+		Data: &signing.SingleSignatureData{
+			SignMode:  txCfg.SignModeHandler().DefaultMode(),
+			Signature: nil,
+		},
+		Sequence: acc.GetSequence(),
+	}
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return "", err
+	}
 
 	signerData := xauthsigning.SignerData{
 		ChainID:       chainID,
 		AccountNumber: acc.GetAccountNumber(),
 		Sequence:      acc.GetSequence(),
 	}
-	var sigV2 signing.SignatureV2
+
 	sigV2, err = clientTx.SignWithPrivKey(txCfg.SignModeHandler().DefaultMode(), signerData,
 		txBuilder, privKey, txCfg, acc.GetSequence())
 	if err != nil {
@@ -255,6 +258,11 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	err = txBuilder.SetSignatures(sigV2)
 	if err != nil {
 		return "", err
+	}
+
+	err = txBuilder.GetTx().ValidateBasic()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "validation: %v\n", err.Error())
 	}
 
 	var txBytes []byte
@@ -275,7 +283,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", err
 	}
 
-	fmt.Fprintf(os.Stderr, "transaction response code: %v\n", grpcRes.TxResponse.Code)
+	fmt.Fprintf(os.Stderr, "transaction response code: %v\n", grpcRes.TxResponse)
 
 	return local, nil
 }
