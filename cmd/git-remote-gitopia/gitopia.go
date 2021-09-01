@@ -32,7 +32,8 @@ import (
 const (
 	chainID              = "internal-2"
 	AccountAddressPrefix = "gitopia"
-	address              = "34.87.152.178:9090"
+	apiURL               = "34.87.152.178:9090"
+	objectsURL           = "http://34.126.69.254:5000"
 )
 
 var (
@@ -74,7 +75,7 @@ type GitopiaHandler struct {
 }
 
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
-	grpcConn, err := grpc.Dial(address,
+	grpcConn, err := grpc.Dial(apiURL,
 		grpc.WithInsecure(),
 	)
 	if err != nil {
@@ -104,7 +105,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 		return fmt.Errorf("fatal: repository owner is malformed")
 	}
 
-	remoteURL := fmt.Sprintf("http://34.126.69.254:5000/%v.git", h.remoteRepositoryId)
+	remoteURL := fmt.Sprintf("%v/%v.git", objectsURL, h.remoteRepositoryId)
 
 	remoteConfig := &goGitConfig.RemoteConfig{
 		Name: "gitopia-objects-store",
@@ -150,8 +151,21 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 	return out, nil
 }
 
+func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
+	fetchOptions := &git.FetchOptions{
+		RemoteName: "gitopia-objects-store",
+		Progress:   os.Stdout,
+	}
+
+	err := remote.Repo.Fetch(fetchOptions)
+	if err != nil {
+		return fmt.Errorf("fatal: %v", err.Error())
+	}
+
+	return nil
+}
+
 func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef string) (string, error) {
-	fmt.Fprintf(os.Stderr, "local: %s remote: %s\n", local, remoteRef)
 	h.didPush = true
 
 	gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
@@ -187,6 +201,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	pushOptions := &git.PushOptions{
 		RemoteName: "gitopia-objects-store",
 		RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", local, remoteRef))},
+		Progress:   os.Stdout,
 	}
 
 	err = remote.Repo.Push(pushOptions)
@@ -262,7 +277,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 
 	err = txBuilder.GetTx().ValidateBasic()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "validation: %v\n", err.Error())
+		fmt.Fprintf(os.Stderr, "fatal: tx validation failed: %v", err.Error())
 	}
 
 	var txBytes []byte
@@ -283,7 +298,9 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", err
 	}
 
-	fmt.Fprintf(os.Stderr, "transaction response code: %v\n", grpcRes.TxResponse)
+	if grpcRes.TxResponse.Code != 0 {
+		return "", fmt.Errorf("fatal: failed to broadcast transaction, code: %v", grpcRes.TxResponse.Code)
+	}
 
 	return local, nil
 }
@@ -292,10 +309,4 @@ func (h *GitopiaHandler) checkPushAccess() (bool, error) {
 	// TODO
 
 	return true, nil
-}
-
-func (h *GitopiaHandler) getRef(name string) (string, error) {
-	// TODO
-
-	return "", nil
 }

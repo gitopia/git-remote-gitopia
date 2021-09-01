@@ -14,7 +14,8 @@ import (
 
 type RemoteHandler interface {
 	List(remote *Remote, forPush bool) ([]string, error)
-	Push(remote *Remote, localRef string, remoteRef string) (string, error)
+	Fetch(remote *Remote, sha, ref string) error
+	Push(remote *Remote, localRef, remoteRef string) (string, error)
 
 	Initialize(remote *Remote) error
 	Finish(remote *Remote) error
@@ -87,23 +88,16 @@ func (r *Remote) push(src, dst string, force bool) {
 	})
 }
 
-// func (r *Remote) fetch(sha, ref string) {
-// 	r.todo = append(r.todo, func() (string, error) {
-// 		fetch := r.NewFetch()
-// 		err := fetch.FetchHash(sha)
-// 		if err != nil {
-// 			return "", fmt.Errorf("command fetch: %v", err)
-// 		}
+func (r *Remote) fetch(sha, ref string) {
+	r.todo = append(r.todo, func() (string, error) {
+		err := r.Handler.Fetch(r, sha, ref)
+		if err != nil {
+			return "", err
+		}
 
-// 		sha, err := hex.DecodeString(sha)
-// 		if err != nil {
-// 			return "", fmt.Errorf("fetch: %v", err)
-// 		}
-
-// 		// r.Tracker.Set(ref, sha)
-// 		return "", nil
-// 	})
-// }
+		return "", nil
+	})
+}
 
 func (r *Remote) ProcessCommands() error {
 	reader := bufio.NewReader(r.reader)
@@ -134,9 +128,9 @@ loop:
 		case strings.HasPrefix(command, "push "):
 			refs := strings.Split(command[5:], ":")
 			r.push(refs[0], refs[1], false) //TODO: parse force
-		// case strings.HasPrefix(command, "fetch "):
-		// 	parts := strings.Split(command, " ")
-		// 	r.fetch(parts[1], parts[2])
+		case strings.HasPrefix(command, "fetch "):
+			parts := strings.Split(command, " ")
+			r.fetch(parts[1], parts[2])
 		case command == "":
 			fallthrough
 		case command == "\n":
@@ -156,6 +150,5 @@ loop:
 		}
 	}
 
-	return r.Handler.Finish(r)
 	return nil
 }

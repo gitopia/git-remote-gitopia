@@ -33,6 +33,7 @@ func Main(args []string, reader io.Reader, writer io.Writer, logger *log.Logger)
 	if err != nil {
 		return err
 	}
+	defer remote.Handler.Finish(remote)
 
 	if err := remote.ProcessCommands(); err != nil {
 		return err
