@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 
 	clientTx "github.com/cosmos/cosmos-sdk/client/tx"
@@ -34,6 +36,7 @@ const (
 	AccountAddressPrefix = "gitopia"
 	apiURL               = "34.87.152.178:9090"
 	objectsURL           = "http://34.126.69.254:5000"
+	saveToArweaveURL     = "http://34.126.69.254:5000/save"
 )
 
 var (
@@ -58,6 +61,12 @@ type GitopiaWallet struct {
 type Owner struct {
 	Type string
 	ID   string
+}
+
+type SaveToArweavePostBody struct {
+	RepositoryID    uint64 `json:"repository_id"`
+	LocalCommitSHA  string `json:"local_commit_sha"`
+	RemoteCommitSHA string `json:"remote_commit_sha"`
 }
 
 type GitopiaHandler struct {
@@ -230,6 +239,11 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", fmt.Errorf("fatal: local branch %s doesn't exist", local)
 	}
 
+	branchShaResponse, err := h.queryClient.BranchSha(context.Background(), &gitopiaTypes.QueryGetBranchShaRequest{
+		RepositoryId: h.remoteRepositoryId,
+	})
+	remoteCommitSHA := branchShaResponse.Sha
+
 	msg := gitopiaTypes.NewMsgCreateBranch(address.String(), h.remoteRepositoryId, remoteRef, localCommitSHA.String())
 	txBuilder.SetMsgs(msg)
 
@@ -300,6 +314,28 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 
 	if grpcRes.TxResponse.Code != 0 {
 		return "", fmt.Errorf("fatal: failed to broadcast transaction, code: %v", grpcRes.TxResponse.Code)
+	}
+
+	// Queue task to upload objects to arweave
+	saveToArweavePostBody := SaveToArweavePostBody{
+		RepositoryID:    h.remoteRepositoryId,
+		LocalCommitSHA:  localCommitSHA.String(),
+		RemoteCommitSHA: remoteCommitSHA,
+	}
+
+	postBody, err := json.Marshal(saveToArweavePostBody)
+	if err != nil {
+		return "", fmt.Errorf("fatal: failed to serialize post data: %v", err.Error())
+	}
+	responseBody := bytes.NewBuffer(postBody)
+	resp, err := http.Post(saveToArweaveURL, "application/json", responseBody)
+	if err != nil {
+		return "", fmt.Errorf("fatal: error posting saveToArweave: %v", err.Error())
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("fatal: error saving to Arweave")
 	}
 
 	return local, nil
