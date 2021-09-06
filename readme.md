@@ -19,3 +19,11 @@ For pushing git repositories to gitopia, you would require a gitopia wallet with
 ```sh
 export GITOPIA_WALLET=/path/to/wallet.json
 ```
+
+## Troubleshooting
+
+If you encounter the following error after installation, make sure to add `$GOBIN` to your `$PATH`
+
+```sh
+git: 'remote-gitopia' is not a git command. See 'git --help'
+```

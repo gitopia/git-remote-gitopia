@@ -18,7 +18,6 @@ type RemoteHandler interface {
 	Push(remote *Remote, localRef, remoteRef string) (string, error)
 
 	Initialize(remote *Remote) error
-	Finish(remote *Remote) error
 }
 
 type Remote struct {
@@ -73,7 +72,7 @@ func NewRemote(handler RemoteHandler, reader io.Reader, writer io.Writer, logger
 }
 
 func (r *Remote) Printf(format string, a ...interface{}) (n int, err error) {
-	r.Logger.Printf("> "+format, a...)
+	// r.Logger.Printf("> "+format, a...)
 	return fmt.Fprintf(r.writer, format, a...)
 }
 
@@ -110,7 +109,7 @@ loop:
 
 		command = strings.Trim(command, "\n")
 
-		r.Logger.Printf("< %s", command)
+		// r.Logger.Printf("< %s", command)
 		switch {
 		case command == "capabilities":
 			r.Printf("push\n")
@@ -134,7 +133,6 @@ loop:
 		case command == "":
 			fallthrough
 		case command == "\n":
-			r.Logger.Println("Processing tasks")
 			for _, task := range r.todo {
 				resp, err := task()
 				if err != nil {

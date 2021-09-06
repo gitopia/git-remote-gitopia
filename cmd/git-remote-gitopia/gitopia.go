@@ -104,7 +104,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	res, err := h.queryClient.UserRepository(context.Background(), params)
 	if err != nil {
-		return fmt.Errorf("fatal: repository 'gitopia://%s/%s' not found", h.remoteUserId, h.remoteRepositoryName)
+		return fmt.Errorf("fatal: repository 'gitopia://%s/%s' not found. Please create it from the gitopia webapp", h.remoteUserId, h.remoteRepositoryName)
 	}
 
 	h.remoteRepositoryId = res.Repository.Id
@@ -113,28 +113,6 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	if err = json.Unmarshal([]byte(res.Repository.Owner), &h.remoteRepositoryOwner); err != nil {
 		return fmt.Errorf("fatal: repository owner is malformed")
 	}
-
-	remoteURL := fmt.Sprintf("%v/%v.git", objectsURL, h.remoteRepositoryId)
-
-	remoteConfig := &goGitConfig.RemoteConfig{
-		Name: "gitopia-objects-store",
-		URLs: []string{remoteURL},
-	}
-
-	_, err = remote.Repo.CreateRemote(remoteConfig)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (h *GitopiaHandler) Finish(remote *core.Remote) error {
-	if h.didPush {
-		remote.Logger.Printf("Pushed to Gitopia\n")
-	}
-
-	remote.Repo.DeleteRemote("gitopia-objects-store")
 
 	return nil
 }
@@ -151,8 +129,8 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 		return out, err
 	}
 
-	for refName, hash := range res.Branches {
-		out = append(out, fmt.Sprintf("%s %s", hash, refName))
+	for _, branch := range res.Branches {
+		out = append(out, fmt.Sprintf("%s %s", branch.Sha, branch.Name))
 	}
 
 	out = append(out, fmt.Sprintf("@refs/heads/%s HEAD", h.remoteDefaultBranch))
@@ -161,13 +139,25 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 }
 
 func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
+	remoteURL := fmt.Sprintf("%v/%v.git", objectsURL, h.remoteRepositoryId)
+	remoteConfig := &goGitConfig.RemoteConfig{
+		Name: "gitopia-objects-store",
+		URLs: []string{remoteURL},
+	}
+
+	_, err := remote.Repo.CreateRemote(remoteConfig)
+	if err != nil {
+		return err
+	}
+	defer remote.Repo.DeleteRemote("gitopia-objects-store")
+
 	fetchOptions := &git.FetchOptions{
 		RemoteName: "gitopia-objects-store",
 		Progress:   os.Stdout,
 	}
 
-	err := remote.Repo.Fetch(fetchOptions)
-	if err != nil {
+	err = remote.Repo.Fetch(fetchOptions)
+	if err != nil && err != git.NoErrAlreadyUpToDate {
 		return fmt.Errorf("fatal: %v", err.Error())
 	}
 
@@ -176,6 +166,17 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 
 func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef string) (string, error) {
 	h.didPush = true
+	remoteURL := fmt.Sprintf("%v/%v.git", objectsURL, h.remoteRepositoryId)
+	remoteConfig := &goGitConfig.RemoteConfig{
+		Name: "gitopia-objects-store",
+		URLs: []string{remoteURL},
+	}
+
+	_, err := remote.Repo.CreateRemote(remoteConfig)
+	if err != nil {
+		return "", err
+	}
+	defer remote.Repo.DeleteRemote("gitopia-objects-store")
 
 	gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
 	if gitopiaWalletPath == "" {
@@ -214,9 +215,9 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	}
 
 	err = remote.Repo.Push(pushOptions)
-	// if err != nil {
-	// 	return "", fmt.Errorf("fatal: error pushing the git objects")
-	// }
+	if err != nil && err != git.NoErrAlreadyUpToDate {
+		return "", fmt.Errorf("fatal: error pushing the git objects")
+	}
 
 	// Update ref on gitopia
 	interfaceRegistry := types.NewInterfaceRegistry()
@@ -242,7 +243,11 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	branchShaResponse, err := h.queryClient.BranchSha(context.Background(), &gitopiaTypes.QueryGetBranchShaRequest{
 		RepositoryId: h.remoteRepositoryId,
 	})
-	remoteCommitSHA := branchShaResponse.Sha
+
+	remoteCommitSHA := "0000000000000000000000000000000000000000"
+	if err != nil {
+		remoteCommitSHA = branchShaResponse.Sha
+	}
 
 	msg := gitopiaTypes.NewMsgCreateBranch(address.String(), h.remoteRepositoryId, remoteRef, localCommitSHA.String())
 	txBuilder.SetMsgs(msg)
