@@ -216,7 +216,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 
 	err = remote.Repo.Push(pushOptions)
 	if err != nil && err != git.NoErrAlreadyUpToDate {
-		return "", fmt.Errorf("fatal: error pushing the git objects")
+		return "", fmt.Errorf("fatal: error pushing the git objects, %v", err.Error())
 	}
 
 	// Update ref on gitopia
@@ -245,7 +245,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	})
 
 	remoteCommitSHA := "0000000000000000000000000000000000000000"
-	if err != nil {
+	if err == nil {
 		remoteCommitSHA = branchShaResponse.Sha
 	}
 
