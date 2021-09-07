@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	clientTx "github.com/cosmos/cosmos-sdk/client/tx"
@@ -384,13 +383,8 @@ func (h *GitopiaHandler) havePushPermission(walletAddress string) (bool, error) 
 	var o gitopiaTypes.Organization
 
 	if h.remoteRepository.Owner.Type == gitopiaTypes.RepositoryOwner_ORGANIZATION {
-		orgId, err := strconv.ParseUint(h.remoteRepository.Owner.Id, 10, 64)
-		if err != nil {
-			return false, fmt.Errorf("fatal: invalid organization id")
-		}
-
 		res, err := h.queryClient.Organization(context.Background(), &gitopiaTypes.QueryGetOrganizationRequest{
-			Id: orgId,
+			Id: h.remoteRepository.Owner.Id,
 		})
 		if err != nil {
 			return false, fmt.Errorf("fatal: organization doesn't exist")
