@@ -95,8 +95,8 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	h.txClient = tx.NewServiceClient(grpcConn)
 
 	// Get RepositoryId
-	res, err := h.queryClient.UserRepository(context.Background(), &gitopiaTypes.QueryGetUserRepositoryRequest{
-		UserId:         h.remoteUserId,
+	res, err := h.queryClient.AddressRepository(context.Background(), &gitopiaTypes.QueryGetAddressRepositoryRequest{
+		Id:             h.remoteUserId,
 		RepositoryName: h.remoteRepositoryName,
 	})
 	if err != nil {
@@ -240,8 +240,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 
 	txBuilder := txCfg.NewTxBuilder()
 
-	var newRemoteRefSha string
-	prevRemoteRefSha := "0000000000000000000000000000000000000000"
+	var newRemoteRefSha, prevRemoteRefSha string
 	var msg sdk.Msg
 
 	if strings.HasPrefix(local, branchPrefix) {
