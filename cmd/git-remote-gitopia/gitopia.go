@@ -34,9 +34,9 @@ import (
 )
 
 const (
-	chainID              = "internal-2"
+	chainID              = "internal-4"
 	AccountAddressPrefix = "gitopia"
-	apiURL               = "34.87.152.178:9090"
+	apiURL               = "34.87.90.147:9090"
 	objectsURL           = "http://34.126.69.254:5000"
 	saveToArweaveURL     = "http://34.126.69.254:5000/save"
 	branchPrefix         = "refs/heads/"
