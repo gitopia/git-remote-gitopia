@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 
 	clientTx "github.com/cosmos/cosmos-sdk/client/tx"
@@ -35,9 +34,9 @@ import (
 )
 
 const (
-	chainID              = "internal-2"
+	chainID              = "internal-4"
 	AccountAddressPrefix = "gitopia"
-	apiURL               = "34.87.152.178:9090"
+	apiURL               = "34.87.90.147:9090"
 	objectsURL           = "http://34.126.69.254:5000"
 	saveToArweaveURL     = "http://34.126.69.254:5000/save"
 	branchPrefix         = "refs/heads/"
@@ -65,8 +64,9 @@ type GitopiaWallet struct {
 
 type SaveToArweavePostBody struct {
 	RepositoryID     uint64 `json:"repository_id"`
-	LocalObjectHash  string `json:"local_object_hash"`
-	RemoteObjectHash string `json:"remote_object_hash"`
+	RemoteRefName    string `json:"remote_ref_name"`
+	NewRemoteRefSha  string `json:"new_remote_ref_sha"`
+	PrevRemoteRefSha string `json:"prev_remote_ref_sha"`
 }
 
 type GitopiaHandler struct {
@@ -95,8 +95,8 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	h.txClient = tx.NewServiceClient(grpcConn)
 
 	// Get RepositoryId
-	res, err := h.queryClient.UserRepository(context.Background(), &gitopiaTypes.QueryGetUserRepositoryRequest{
-		UserId:         h.remoteUserId,
+	res, err := h.queryClient.AddressRepository(context.Background(), &gitopiaTypes.QueryGetAddressRepositoryRequest{
+		Id:             h.remoteUserId,
 		RepositoryName: h.remoteRepositoryName,
 	})
 	if err != nil {
@@ -240,8 +240,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 
 	txBuilder := txCfg.NewTxBuilder()
 
-	var localObjectHash string
-	remoteObjectHash := "0000000000000000000000000000000000000000"
+	var newRemoteRefSha, prevRemoteRefSha string
 	var msg sdk.Msg
 
 	if strings.HasPrefix(local, branchPrefix) {
@@ -249,7 +248,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		if err != nil {
 			return "", fmt.Errorf("fatal: local branch %s doesn't exist", local)
 		}
-		localObjectHash = localCommitHash.String()
+		newRemoteRefSha = localCommitHash.String()
 
 		remoteBranchName := strings.TrimPrefix(remoteRef, branchPrefix)
 		branchShaResponse, err := h.queryClient.BranchSha(context.Background(), &gitopiaTypes.QueryGetBranchShaRequest{
@@ -257,17 +256,17 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 			BranchName:   remoteBranchName,
 		})
 		if err == nil {
-			remoteObjectHash = branchShaResponse.Sha
+			prevRemoteRefSha = branchShaResponse.Sha
 		}
 
-		msg = gitopiaTypes.NewMsgCreateBranch(walletAddress.String(), h.remoteRepository.Id, remoteBranchName, localObjectHash)
+		msg = gitopiaTypes.NewMsgCreateBranch(walletAddress.String(), h.remoteRepository.Id, remoteBranchName, newRemoteRefSha)
 	} else if strings.HasPrefix(local, tagPrefix) {
 		localTagName := strings.TrimPrefix(local, tagPrefix)
 		ref, err := remote.Repo.Tag(localTagName)
 		if err != nil {
 			return "", fmt.Errorf("fatal: invalid tag name, %v", localTagName)
 		}
-		localObjectHash = ref.Hash().String()
+		newRemoteRefSha = ref.Hash().String()
 
 		remoteTagName := strings.TrimPrefix(remoteRef, tagPrefix)
 		tagShaResponse, err := h.queryClient.TagSha(context.Background(), &gitopiaTypes.QueryGetTagShaRequest{
@@ -275,10 +274,10 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 			TagName:      remoteTagName,
 		})
 		if err == nil {
-			remoteObjectHash = tagShaResponse.Sha
+			prevRemoteRefSha = tagShaResponse.Sha
 		}
 
-		msg = gitopiaTypes.NewMsgCreateTag(walletAddress.String(), h.remoteRepository.Id, remoteTagName, ref.Hash().String())
+		msg = gitopiaTypes.NewMsgCreateTag(walletAddress.String(), h.remoteRepository.Id, remoteTagName, newRemoteRefSha)
 	} else {
 		return "", fmt.Errorf("fatal: not a valid branch/tag, %v", local)
 	}
@@ -356,8 +355,9 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	// Queue task to upload objects to arweave
 	saveToArweavePostBody := SaveToArweavePostBody{
 		RepositoryID:     h.remoteRepository.Id,
-		LocalObjectHash:  localObjectHash,
-		RemoteObjectHash: remoteObjectHash,
+		RemoteRefName:    remoteRef,
+		NewRemoteRefSha:  newRemoteRefSha,
+		PrevRemoteRefSha: prevRemoteRefSha,
 	}
 
 	postBody, err := json.Marshal(saveToArweavePostBody)
@@ -382,13 +382,8 @@ func (h *GitopiaHandler) havePushPermission(walletAddress string) (bool, error) 
 	var o gitopiaTypes.Organization
 
 	if h.remoteRepository.Owner.Type == gitopiaTypes.RepositoryOwner_ORGANIZATION {
-		orgId, err := strconv.ParseUint(h.remoteRepository.Owner.Id, 10, 64)
-		if err != nil {
-			return false, fmt.Errorf("fatal: invalid organization id")
-		}
-
 		res, err := h.queryClient.Organization(context.Background(), &gitopiaTypes.QueryGetOrganizationRequest{
-			Id: orgId,
+			Id: h.remoteRepository.Owner.Id,
 		})
 		if err != nil {
 			return false, fmt.Errorf("fatal: organization doesn't exist")
