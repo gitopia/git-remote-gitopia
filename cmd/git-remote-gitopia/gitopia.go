@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	clientTx "github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
@@ -34,9 +35,8 @@ import (
 )
 
 const (
-	chainID              = "internal-4"
 	AccountAddressPrefix = "gitopia"
-	apiURL               = "34.87.90.147:9090"
+	apiURL               = "35.247.152.14:9090"
 	objectsURL           = "http://34.126.69.254:5000"
 	saveToArweaveURL     = "http://34.126.69.254:5000/save"
 	branchPrefix         = "refs/heads/"
@@ -74,6 +74,7 @@ type GitopiaHandler struct {
 	accountQueryClient authType.QueryClient
 	txClient           tx.ServiceClient
 
+	chainId              string
 	remoteUserId         string
 	remoteRepositoryName string
 	remoteRepository     gitopiaTypes.Repository
@@ -92,7 +93,14 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.queryClient = gitopiaTypes.NewQueryClient(grpcConn)
 	h.accountQueryClient = authType.NewQueryClient(grpcConn)
-	h.txClient = tx.NewServiceClient(grpcConn)
+	serviceClient := tmservice.NewServiceClient(grpcConn)
+
+	// Get chain id for signing transaction
+	nodeInfoRes, err := serviceClient.GetNodeInfo(context.Background(), &tmservice.GetNodeInfoRequest{})
+	if err != nil {
+		return err
+	}
+	h.chainId = nodeInfoRes.DefaultNodeInfo.Network
 
 	// Get RepositoryId
 	res, err := h.queryClient.AddressRepository(context.Background(), &gitopiaTypes.QueryGetAddressRepositoryRequest{
@@ -100,7 +108,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 		RepositoryName: h.remoteRepositoryName,
 	})
 	if err != nil {
-		return fmt.Errorf("fatal: repository 'gitopia://%s/%s' not found. Please create it from the gitopia webapp", h.remoteUserId, h.remoteRepositoryName)
+		return err
 	}
 
 	h.remoteRepository = *res.Repository
@@ -309,7 +317,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	}
 
 	signerData := xauthsigning.SignerData{
-		ChainID:       chainID,
+		ChainID:       h.chainId,
 		AccountNumber: acc.GetAccountNumber(),
 		Sequence:      acc.GetSequence(),
 	}
