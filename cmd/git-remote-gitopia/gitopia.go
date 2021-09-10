@@ -10,19 +10,8 @@ import (
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
-	clientTx "github.com/cosmos/cosmos-sdk/client/tx"
-	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
-	cosmoscryptoed "github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
-	cosmoscryptosecp "github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
-	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/types/tx"
-	"github.com/cosmos/cosmos-sdk/types/tx/signing"
-	xauthsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
-	authTx "github.com/cosmos/cosmos-sdk/x/auth/tx"
-	authType "github.com/cosmos/cosmos-sdk/x/auth/types"
 	core "github.com/gitopia/git-remote-gitopia/core"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
@@ -70,9 +59,8 @@ type SaveToArweavePostBody struct {
 }
 
 type GitopiaHandler struct {
-	queryClient        gitopiaTypes.QueryClient
-	accountQueryClient authType.QueryClient
-	txClient           tx.ServiceClient
+	grpcConn    *grpc.ClientConn
+	queryClient gitopiaTypes.QueryClient
 
 	chainId              string
 	remoteUserId         string
@@ -83,7 +71,9 @@ type GitopiaHandler struct {
 }
 
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
-	grpcConn, err := grpc.Dial(apiURL,
+	var err error
+
+	h.grpcConn, err = grpc.Dial(apiURL,
 		grpc.WithInsecure(),
 	)
 	if err != nil {
@@ -91,9 +81,8 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	}
 	// defer grpcConn.Close()
 
-	h.queryClient = gitopiaTypes.NewQueryClient(grpcConn)
-	h.accountQueryClient = authType.NewQueryClient(grpcConn)
-	serviceClient := tmservice.NewServiceClient(grpcConn)
+	h.queryClient = gitopiaTypes.NewQueryClient(h.grpcConn)
+	serviceClient := tmservice.NewServiceClient(h.grpcConn)
 
 	// Get chain id for signing transaction
 	nodeInfoRes, err := serviceClient.GetNodeInfo(context.Background(), &tmservice.GetNodeInfoRequest{})
@@ -172,18 +161,8 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 
 func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef string) (string, error) {
 	h.didPush = true
-	remoteURL := fmt.Sprintf("%v/%v.git", objectsURL, h.remoteRepository.Id)
-	remoteConfig := &goGitConfig.RemoteConfig{
-		Name: "gitopia-objects-store",
-		URLs: []string{remoteURL},
-	}
 
-	_, err := remote.Repo.CreateRemote(remoteConfig)
-	if err != nil {
-		return "", err
-	}
-	defer remote.Repo.DeleteRemote("gitopia-objects-store")
-
+	// Read wallet file
 	gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
 	if gitopiaWalletPath == "" {
 		return "", fmt.Errorf("fatal: GITOPIA_WALLET environment variable is not set")
@@ -200,6 +179,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", fmt.Errorf("fatal: error decoding wallet file")
 	}
 
+	// Generate private key
 	derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", gitopiaWallet.HDpath)
 	if err != nil {
 		return "", err
@@ -221,6 +201,38 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", fmt.Errorf("fatal: you don't have write permissions to this repository")
 	}
 
+	var msg sdk.Msg
+
+	// Delete branch/tag
+	if local == "" {
+		if strings.HasPrefix(remoteRef, branchPrefix) {
+			remoteBranchName := strings.TrimPrefix(remoteRef, branchPrefix)
+			msg = gitopiaTypes.NewMsgDeleteBranch(walletAddress.String(), h.remoteRepository.Id, remoteBranchName)
+		} else if strings.HasPrefix(remoteRef, tagPrefix) {
+			remoteTagName := strings.TrimPrefix(remoteRef, tagPrefix)
+			msg = gitopiaTypes.NewMsgDeleteTag(walletAddress.String(), h.remoteRepository.Id, remoteTagName)
+		}
+
+		err := signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+		if err != nil {
+			return "", err
+		}
+
+		return local, nil
+	}
+
+	remoteURL := fmt.Sprintf("%v/%v.git", objectsURL, h.remoteRepository.Id)
+	remoteConfig := &goGitConfig.RemoteConfig{
+		Name: "gitopia-objects-store",
+		URLs: []string{remoteURL},
+	}
+
+	_, err = remote.Repo.CreateRemote(remoteConfig)
+	if err != nil {
+		return "", err
+	}
+	defer remote.Repo.DeleteRemote("gitopia-objects-store")
+
 	pushOptions := &git.PushOptions{
 		RemoteName: "gitopia-objects-store",
 		RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", local, remoteRef))},
@@ -232,25 +244,9 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", fmt.Errorf("fatal: error pushing the git objects, %v", err.Error())
 	}
 
-	// Update ref on gitopia
-	interfaceRegistry := types.NewInterfaceRegistry()
-	interfaceRegistry.RegisterInterface(
-		"cosmos.auth.v1beta1.AccountI",
-		(*authType.AccountI)(nil),
-		&authType.BaseAccount{},
-		&authType.ModuleAccount{},
-	)
-	interfaceRegistry.RegisterInterface("cosmos.crypto.PubKey", (*cryptotypes.PubKey)(nil))
-	interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &cosmoscryptosecp.PubKey{})
-	interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &cosmoscryptoed.PubKey{})
-	marshaler := codec.NewProtoCodec(interfaceRegistry)
-	txCfg := authTx.NewTxConfig(marshaler, authTx.DefaultSignModes)
-
-	txBuilder := txCfg.NewTxBuilder()
-
 	var newRemoteRefSha, prevRemoteRefSha string
-	var msg sdk.Msg
 
+	// Update ref on gitopia
 	if strings.HasPrefix(local, branchPrefix) {
 		localCommitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(local))
 		if err != nil {
@@ -290,74 +286,9 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", fmt.Errorf("fatal: not a valid branch/tag, %v", local)
 	}
 
-	txBuilder.SetMsgs(msg)
-	txBuilder.SetGasLimit(200000)
-
-	res, err := h.accountQueryClient.Account(context.Background(),
-		&authType.QueryAccountRequest{
-			Address: walletAddress.String(),
-		},
-	)
-	var acc authType.AccountI
-	if err := interfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
-		return "", err
-	}
-
-	sigV2 := signing.SignatureV2{
-		PubKey: privKey.PubKey(),
-		Data: &signing.SingleSignatureData{
-			SignMode:  txCfg.SignModeHandler().DefaultMode(),
-			Signature: nil,
-		},
-		Sequence: acc.GetSequence(),
-	}
-	err = txBuilder.SetSignatures(sigV2)
+	err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
 	if err != nil {
 		return "", err
-	}
-
-	signerData := xauthsigning.SignerData{
-		ChainID:       h.chainId,
-		AccountNumber: acc.GetAccountNumber(),
-		Sequence:      acc.GetSequence(),
-	}
-
-	sigV2, err = clientTx.SignWithPrivKey(txCfg.SignModeHandler().DefaultMode(), signerData,
-		txBuilder, privKey, txCfg, acc.GetSequence())
-	if err != nil {
-		return "", err
-	}
-
-	err = txBuilder.SetSignatures(sigV2)
-	if err != nil {
-		return "", err
-	}
-
-	err = txBuilder.GetTx().ValidateBasic()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: tx validation failed: %v", err.Error())
-	}
-
-	var txBytes []byte
-	txBytes, err = txCfg.TxEncoder()(txBuilder.GetTx())
-	if err != nil {
-		return "", err
-	}
-
-	var grpcRes *tx.BroadcastTxResponse
-	grpcRes, err = h.txClient.BroadcastTx(
-		context.Background(),
-		&tx.BroadcastTxRequest{
-			Mode:    tx.BroadcastMode_BROADCAST_MODE_SYNC,
-			TxBytes: txBytes,
-		},
-	)
-	if err != nil {
-		return "", err
-	}
-
-	if grpcRes.TxResponse.Code != 0 {
-		return "", fmt.Errorf("fatal: failed to broadcast transaction, code: %v", grpcRes.TxResponse.Code)
 	}
 
 	// Queue task to upload objects to arweave
