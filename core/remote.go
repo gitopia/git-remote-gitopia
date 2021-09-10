@@ -76,7 +76,7 @@ func (r *Remote) Printf(format string, a ...interface{}) (n int, err error) {
 	return fmt.Fprintf(r.writer, format, a...)
 }
 
-func (r *Remote) push(src, dst string, force bool) {
+func (r *Remote) push(src, dst string) {
 	r.todo = append(r.todo, func() (string, error) {
 		done, err := r.Handler.Push(r, src, dst)
 		if err != nil {
@@ -126,7 +126,7 @@ loop:
 			r.Printf("\n")
 		case strings.HasPrefix(command, "push "):
 			refs := strings.Split(command[5:], ":")
-			r.push(refs[0], refs[1], false) //TODO: parse force
+			r.push(refs[0], refs[1])
 		case strings.HasPrefix(command, "fetch "):
 			parts := strings.Split(command, " ")
 			r.fetch(parts[1], parts[2])

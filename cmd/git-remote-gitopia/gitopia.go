@@ -233,10 +233,17 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	}
 	defer remote.Repo.DeleteRemote("gitopia-objects-store")
 
+	force := false
+	if strings.HasPrefix(local, "+") {
+		local = strings.TrimPrefix(local, "+")
+		force = true
+	}
+
 	pushOptions := &git.PushOptions{
 		RemoteName: "gitopia-objects-store",
 		RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", local, remoteRef))},
 		Progress:   os.Stdout,
+		Force:      force,
 	}
 
 	err = remote.Repo.Push(pushOptions)
