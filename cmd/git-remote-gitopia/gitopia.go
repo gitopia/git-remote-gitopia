@@ -207,6 +207,12 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	if local == "" {
 		if strings.HasPrefix(remoteRef, branchPrefix) {
 			remoteBranchName := strings.TrimPrefix(remoteRef, branchPrefix)
+
+			// Check if it's the default branch
+			if remoteBranchName == h.remoteRepository.DefaultBranch {
+				return "", fmt.Errorf("fatal: cannot delete default branch, %v", remoteBranchName)
+			}
+
 			msg = gitopiaTypes.NewMsgDeleteBranch(walletAddress.String(), h.remoteRepository.Id, remoteBranchName)
 		} else if strings.HasPrefix(remoteRef, tagPrefix) {
 			remoteTagName := strings.TrimPrefix(remoteRef, tagPrefix)
