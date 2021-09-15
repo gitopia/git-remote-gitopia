@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
@@ -102,6 +103,10 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.remoteRepository = *res.Repository
 
+	config := sdk.GetConfig()
+	config.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
+	config.Seal()
+
 	return nil
 }
 
@@ -180,17 +185,13 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	}
 
 	// Generate private key
-	derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", gitopiaWallet.HDpath)
+	hdPath := gitopiaWallet.HDpath + strconv.Itoa(gitopiaWallet.PathIncrement)
+	derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", hdPath)
 	if err != nil {
 		return "", err
 	}
 
 	privKey := hd.Secp256k1.Generate()(derivedPriv)
-
-	config := sdk.GetConfig()
-	config.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
-	config.Seal()
-
 	walletAddress := sdk.AccAddress(privKey.PubKey().Address())
 
 	havePushPermission, err := h.havePushPermission(walletAddress.String())
