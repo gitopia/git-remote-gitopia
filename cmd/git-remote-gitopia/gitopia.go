@@ -103,6 +103,10 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.remoteRepository = *res.Repository
 
+	config := sdk.GetConfig()
+	config.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
+	config.Seal()
+
 	return nil
 }
 
@@ -188,11 +192,6 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	}
 
 	privKey := hd.Secp256k1.Generate()(derivedPriv)
-
-	config := sdk.GetConfig()
-	config.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
-	config.Seal()
-
 	walletAddress := sdk.AccAddress(privKey.PubKey().Address())
 
 	havePushPermission, err := h.havePushPermission(walletAddress.String())
