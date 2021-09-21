@@ -194,6 +194,10 @@ github.com/gitopia/gitopia v0.7.1-0.20210907194705-53e5c34b2fb2 h1:XR+YfEjfD6AkK
 github.com/gitopia/gitopia v0.7.1-0.20210907194705-53e5c34b2fb2/go.mod h1:zVFAP4WzI1bapXPNn7POT1If5uHJxTDZ4nG2CGiiu+c=
 github.com/gitopia/gitopia v0.7.1-0.20210908101447-c82c98352e19 h1:rpg74I7JG9XHs6SzdtugFKxGJxmpsZK+Yf1LBgrA4rg=
 github.com/gitopia/gitopia v0.7.1-0.20210908101447-c82c98352e19/go.mod h1:dNVXmTrslR7J20yRTu6DwfoVhgyG8zW1Oo9C5zTuLcI=
+github.com/gitopia/gitopia v0.9.0 h1:yQy1xWeZI/Da6k5xh79RQhHouoCBf2MuuqdATCOIa9M=
+github.com/gitopia/gitopia v0.9.0/go.mod h1:dNVXmTrslR7J20yRTu6DwfoVhgyG8zW1Oo9C5zTuLcI=
+github.com/gitopia/gitopia v0.10.0-rc.1 h1:B57VcQiYO8xGVojBqF2Ui469xPwgpROlhGUZrnwtBRI=
+github.com/gitopia/gitopia v0.10.0-rc.1/go.mod h1:dNVXmTrslR7J20yRTu6DwfoVhgyG8zW1Oo9C5zTuLcI=
 github.com/gliderlabs/ssh v0.2.2 h1:6zsha5zo/TWhRhwqCD3+EarCAgZ2yN28ipRnGPnwkI0=
 github.com/gliderlabs/ssh v0.2.2/go.mod h1:U7qILu1NlMHj9FlMhZLlkCdDnU1DBEAqr0aevW3Awn0=
 github.com/go-git/gcfg v1.5.0 h1:Q5ViNfGF8zFgyJWPqYwA7qGFoMTEiBmdlkcfRmpIMa4=
