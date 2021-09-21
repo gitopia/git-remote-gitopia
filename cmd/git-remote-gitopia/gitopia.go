@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -305,28 +303,30 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", err
 	}
 
+	_ = prevRemoteRefSha
+
 	// Queue task to upload objects to arweave
-	saveToArweavePostBody := SaveToArweavePostBody{
-		RepositoryID:     h.remoteRepository.Id,
-		RemoteRefName:    remoteRef,
-		NewRemoteRefSha:  newRemoteRefSha,
-		PrevRemoteRefSha: prevRemoteRefSha,
-	}
+	// saveToArweavePostBody := SaveToArweavePostBody{
+	// 	RepositoryID:     h.remoteRepository.Id,
+	// 	RemoteRefName:    remoteRef,
+	// 	NewRemoteRefSha:  newRemoteRefSha,
+	// 	PrevRemoteRefSha: prevRemoteRefSha,
+	// }
 
-	postBody, err := json.Marshal(saveToArweavePostBody)
-	if err != nil {
-		return "", fmt.Errorf("fatal: failed to serialize post data: %v", err.Error())
-	}
-	responseBody := bytes.NewBuffer(postBody)
-	resp, err := http.Post(saveToArweaveURL, "application/json", responseBody)
-	if err != nil {
-		return "", fmt.Errorf("fatal: error posting saveToArweave: %v", err.Error())
-	}
-	defer resp.Body.Close()
+	// postBody, err := json.Marshal(saveToArweavePostBody)
+	// if err != nil {
+	// 	return "", fmt.Errorf("fatal: failed to serialize post data: %v", err.Error())
+	// }
+	// responseBody := bytes.NewBuffer(postBody)
+	// resp, err := http.Post(saveToArweaveURL, "application/json", responseBody)
+	// if err != nil {
+	// 	return "", fmt.Errorf("fatal: error posting saveToArweave: %v", err.Error())
+	// }
+	// defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("fatal: error saving to Arweave")
-	}
+	// if resp.StatusCode != http.StatusOK {
+	// 	return "", fmt.Errorf("fatal: error saving to Arweave")
+	// }
 
 	return local, nil
 }
