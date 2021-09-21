@@ -4,7 +4,29 @@ git remote helper for [gitopia](https://gitopia.org/)
 
 ## Installation
 
-Installing `git-remote-gitopia` requires [Go 1.16+](https://golang.org/dl/).
+You need to install `git-remote-gitopia` helper so that your git command line can understand `gitopia://` transport.
+
+```
+curl https://get.gitopia.com | bash
+```
+
+If you get the following error
+
+```
+mv: rename ./git-remote-gitopia to /usr/local/bin/git-remote-gitopia: Permission denied
+============
+Error: mv failed
+```
+
+You would need root permission to move the binary to `/usr/local/bin`
+
+```
+sudo mv /tmp/tmpinstalldir/git-remote-gitopia /usr/local/bin/
+```
+
+## Building
+
+Building `git-remote-gitopia` requires [Go 1.16+](https://golang.org/dl/).
 
 ```
 make install
