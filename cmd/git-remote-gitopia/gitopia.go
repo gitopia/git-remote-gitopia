@@ -121,16 +121,6 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 		out = append(out, fmt.Sprintf("%s %s%s", branch.Sha, branchPrefix, branch.Name))
 	}
 
-	tagAllRes, err := h.queryClient.TagAll(context.Background(), &gitopiaTypes.QueryGetAllTagRequest{
-		RepositoryId: h.remoteRepository.Id,
-	})
-	if err != nil {
-		return out, err
-	}
-	for _, tag := range tagAllRes.Tags {
-		out = append(out, fmt.Sprintf("%s %s%s", tag.Sha, tagPrefix, tag.Name))
-	}
-
 	out = append(out, fmt.Sprintf("@refs/heads/%s HEAD", h.remoteRepository.DefaultBranch))
 
 	return out, nil
@@ -151,6 +141,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 
 	fetchOptions := &git.FetchOptions{
 		RemoteName: "gitopia-objects-store",
+		Tags:       git.AllTags,
 		Progress:   os.Stdout,
 	}
 
