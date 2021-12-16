@@ -163,21 +163,30 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 }
 
 func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef string) (string, error) {
+	var gitopiaWallet GitopiaWallet
+	var buffer []byte
 	h.didPush = true
 
-	// Read wallet file
-	gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
-	if gitopiaWalletPath == "" {
-		return "", fmt.Errorf("fatal: GITOPIA_WALLET environment variable is not set")
+	// Read wallet
+	isGitHubAction := os.Getenv("GITHUB_ACTIONS")
+	if isGitHubAction == "true" {
+		// Read from GitHub secret
+		buffer = []byte(os.Getenv("GITOPIA_WALLET"))
+	} else {
+		gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
+		if gitopiaWalletPath == "" {
+			return "", fmt.Errorf("fatal: GITOPIA_WALLET environment variable is not set")
+		}
+
+		var err error
+		buffer, err = os.ReadFile(gitopiaWalletPath)
+		if err != nil {
+			return "", fmt.Errorf("fatal: error reading gitopia wallet")
+		}
+
 	}
 
-	buffer, err := os.ReadFile(gitopiaWalletPath)
-	if err != nil {
-		return "", fmt.Errorf("fatal: error reading gitopia wallet")
-	}
-
-	var gitopiaWallet GitopiaWallet
-	err = json.Unmarshal(buffer, &gitopiaWallet)
+	err := json.Unmarshal(buffer, &gitopiaWallet)
 	if err != nil {
 		return "", fmt.Errorf("fatal: error decoding wallet file")
 	}
@@ -275,7 +284,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 			prevRemoteRefSha = branchShaResponse.Sha
 		}
 
-		msg = gitopiaTypes.NewMsgCreateBranch(walletAddress.String(), h.remoteRepository.Id, remoteBranchName, newRemoteRefSha)
+		msg = gitopiaTypes.NewMsgSetRepositoryBranch(walletAddress.String(), h.remoteRepository.Id, remoteBranchName, newRemoteRefSha)
 	} else if strings.HasPrefix(local, tagPrefix) {
 		localTagName := strings.TrimPrefix(local, tagPrefix)
 		ref, err := remote.Repo.Tag(localTagName)
@@ -293,7 +302,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 			prevRemoteRefSha = tagShaResponse.Sha
 		}
 
-		msg = gitopiaTypes.NewMsgCreateTag(walletAddress.String(), h.remoteRepository.Id, remoteTagName, newRemoteRefSha)
+		msg = gitopiaTypes.NewMsgSetRepositoryTag(walletAddress.String(), h.remoteRepository.Id, remoteTagName, newRemoteRefSha)
 	} else {
 		return "", fmt.Errorf("fatal: not a valid branch/tag, %v", local)
 	}

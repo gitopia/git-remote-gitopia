@@ -3,8 +3,8 @@ module github.com/gitopia/git-remote-gitopia
 go 1.16
 
 require (
-	github.com/cosmos/cosmos-sdk v0.42.4 // indirect
-	github.com/gitopia/gitopia v0.10.0-rc.1
+	github.com/cosmos/cosmos-sdk v0.44.0
+	github.com/gitopia/gitopia v0.10.2-0.20211012150814-9abe89c75a1b
 	github.com/go-git/go-git/v5 v5.4.2
 	google.golang.org/genproto v0.0.0-20210903162649-d08c68adba83 // indirect
 	google.golang.org/grpc v1.40.0
