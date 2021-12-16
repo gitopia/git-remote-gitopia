@@ -24,9 +24,9 @@ import (
 
 const (
 	AccountAddressPrefix = "gitopia"
-	apiURL               = "34.126.183.252:9090"
-	objectsURL           = "http://34.87.64.22:5000"
-	saveToArweaveURL     = "http://34.87.64.22:5000/save"
+	apiURL               = "34.93.81.34:9090"
+	objectsURL           = "http://35.200.147.237:5000/"
+	saveToArweaveURL     = "http://35.200.147.237:5000/save"
 	branchPrefix         = "refs/heads/"
 	tagPrefix            = "refs/tags/"
 )

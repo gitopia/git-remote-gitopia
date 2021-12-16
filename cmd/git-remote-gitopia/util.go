@@ -106,7 +106,7 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 	}
 
 	if grpcRes.TxResponse.Code != 0 {
-		return fmt.Errorf("fatal: failed to broadcast transaction, code: %v", grpcRes.TxResponse.Code)
+		return fmt.Errorf("fatal: failed to broadcast transaction: %v", grpcRes.TxResponse)
 	}
 
 	return nil
