@@ -21,10 +21,8 @@ import (
 	"google.golang.org/grpc"
 )
 
-func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, privKey cryptotypes.PrivKey, msg sdk.Msg) error {
+func signWithWallet(cc *grpc.ClientConn, sender string, chainId string, privKey cryptotypes.PrivKey, msg sdk.Msg) ([]byte, error) {
 	accountQueryClient := authtype.NewQueryClient(cc)
-	txClient := tx.NewServiceClient(cc)
-
 	interfaceRegistry := types.NewInterfaceRegistry()
 	interfaceRegistry.RegisterInterface(
 		"cosmos.auth.v1beta1.AccountI",
@@ -39,7 +37,11 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 	txCfg := authtx.NewTxConfig(marshaler, authtx.DefaultSignModes)
 
 	txBuilder := txCfg.NewTxBuilder()
-	txBuilder.SetMsgs(msg)
+	err := txBuilder.SetMsgs(msg)
+	if err != nil {
+		return nil, err
+	}
+	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin("utlore", sdk.NewInt(500))))
 	txBuilder.SetGasLimit(200000)
 
 	res, err := accountQueryClient.Account(context.Background(),
@@ -47,22 +49,26 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 			Address: sender,
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
 	var acc authtype.AccountI
 	if err := interfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
-		return err
+		return nil, err
 	}
 
+	signMode := txCfg.SignModeHandler().DefaultMode()
 	sigV2 := signing.SignatureV2{
 		PubKey: privKey.PubKey(),
 		Data: &signing.SingleSignatureData{
-			SignMode:  txCfg.SignModeHandler().DefaultMode(),
+			SignMode:  signMode,
 			Signature: nil,
 		},
 		Sequence: acc.GetSequence(),
 	}
 	err = txBuilder.SetSignatures(sigV2)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	signerData := xauthsigning.SignerData{
@@ -71,15 +77,15 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 		Sequence:      acc.GetSequence(),
 	}
 
-	sigV2, err = clientTx.SignWithPrivKey(txCfg.SignModeHandler().DefaultMode(), signerData,
+	sigV2, err = clientTx.SignWithPrivKey(signMode, signerData,
 		txBuilder, privKey, txCfg, acc.GetSequence())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = txBuilder.SetSignatures(sigV2)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	err = txBuilder.GetTx().ValidateBasic()
@@ -87,14 +93,113 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 		fmt.Fprintf(os.Stderr, "fatal: tx validation failed: %v", err.Error())
 	}
 
-	var txBytes []byte
-	txBytes, err = txCfg.TxEncoder()(txBuilder.GetTx())
+	txBytes, err := txCfg.TxEncoder()(txBuilder.GetTx())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	var grpcRes *tx.BroadcastTxResponse
-	grpcRes, err = txClient.BroadcastTx(
+	return txBytes, nil
+}
+
+func signWithLedger(cc *grpc.ClientConn, sender string, chainId string, ledgerPrivKey cryptotypes.LedgerPrivKey, msg sdk.Msg) ([]byte, error) {
+	accountQueryClient := authtype.NewQueryClient(cc)
+	interfaceRegistry := types.NewInterfaceRegistry()
+	interfaceRegistry.RegisterInterface(
+		"cosmos.auth.v1beta1.AccountI",
+		(*authtype.AccountI)(nil),
+		&authtype.BaseAccount{},
+		&authtype.ModuleAccount{},
+	)
+	interfaceRegistry.RegisterInterface("cosmos.crypto.PubKey", (*cryptotypes.PubKey)(nil))
+	interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &cosmoscryptosecp.PubKey{})
+	interfaceRegistry.RegisterImplementations((*cryptotypes.PubKey)(nil), &cosmoscryptoed.PubKey{})
+	marshaler := codec.NewProtoCodec(interfaceRegistry)
+	txCfg := authtx.NewTxConfig(marshaler, authtx.DefaultSignModes)
+
+	txBuilder := txCfg.NewTxBuilder()
+	err := txBuilder.SetMsgs(msg)
+	if err != nil {
+		return nil, err
+	}
+	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin("utlore", sdk.NewInt(500))))
+	txBuilder.SetGasLimit(200000)
+
+	res, err := accountQueryClient.Account(context.Background(),
+		&authtype.QueryAccountRequest{
+			Address: sender,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	var acc authtype.AccountI
+	if err := interfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
+		return nil, err
+	}
+
+	signMode := signing.SignMode_SIGN_MODE_LEGACY_AMINO_JSON
+	sigV2 := signing.SignatureV2{
+		PubKey: ledgerPrivKey.PubKey(),
+		Data: &signing.SingleSignatureData{
+			SignMode:  signMode,
+			Signature: nil,
+		},
+		Sequence: acc.GetSequence(),
+	}
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return nil, err
+	}
+
+	signerData := xauthsigning.SignerData{
+		ChainID:       chainId,
+		AccountNumber: acc.GetAccountNumber(),
+		Sequence:      acc.GetSequence(),
+	}
+
+	bytesToSign, err := txCfg.SignModeHandler().GetSignBytes(signMode, signerData, txBuilder.GetTx())
+	if err != nil {
+		return nil, err
+	}
+
+	sigBytes, err := ledgerPrivKey.Sign(bytesToSign)
+	if err != nil {
+		return nil, err
+	}
+
+	// Construct the SignatureV2 struct
+	sigData := signing.SingleSignatureData{
+		SignMode:  signMode,
+		Signature: sigBytes,
+	}
+	sigV2 = signing.SignatureV2{
+		PubKey:   ledgerPrivKey.PubKey(),
+		Data:     &sigData,
+		Sequence: acc.GetSequence(),
+	}
+
+	err = txBuilder.SetSignatures(sigV2)
+	if err != nil {
+		return nil, err
+	}
+
+	err = txBuilder.GetTx().ValidateBasic()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: tx validation failed: %v", err.Error())
+	}
+
+	txBytes, err := txCfg.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return nil, err
+	}
+
+	return txBytes, nil
+}
+
+func broadcastTx(cc *grpc.ClientConn, txBytes []byte) error {
+	txClient := tx.NewServiceClient(cc)
+
+	grpcRes, err := txClient.BroadcastTx(
 		context.Background(),
 		&tx.BroadcastTxRequest{
 			Mode:    tx.BroadcastMode_BROADCAST_MODE_SYNC,

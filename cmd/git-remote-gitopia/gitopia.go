@@ -10,6 +10,8 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
+	"github.com/cosmos/cosmos-sdk/crypto/ledger"
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	core "github.com/gitopia/git-remote-gitopia/core"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
@@ -164,42 +166,69 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 
 func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef string) (string, error) {
 	var gitopiaWallet GitopiaWallet
+	var walletAddress sdk.AccAddress
+	var privKey cryptotypes.PrivKey
+	var ledgerPrivKey cryptotypes.LedgerPrivKey
 	var buffer []byte
+	var err error
 	h.didPush = true
+	var useLedger bool
 
 	// Read wallet
 	isGitHubAction := os.Getenv("GITHUB_ACTIONS")
 	if isGitHubAction == "true" {
 		// Read from GitHub secret
 		buffer = []byte(os.Getenv("GITOPIA_WALLET"))
-	} else {
-		gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
-		if gitopiaWalletPath == "" {
-			return "", fmt.Errorf("fatal: GITOPIA_WALLET environment variable is not set")
+		err = json.Unmarshal(buffer, &gitopiaWallet)
+		if err != nil {
+			return "", fmt.Errorf("fatal: error decoding wallet file")
 		}
 
-		var err error
+		// Generate private key
+		hdPath := gitopiaWallet.HDpath + strconv.Itoa(gitopiaWallet.PathIncrement)
+		derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", hdPath)
+		if err != nil {
+			return "", err
+		}
+
+		privKey = hd.Secp256k1.Generate()(derivedPriv)
+		walletAddress = sdk.AccAddress(privKey.PubKey().Address())
+	} else if len(os.Getenv("GITOPIA_WALLET")) != 0 {
+		gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
 		buffer, err = os.ReadFile(gitopiaWalletPath)
 		if err != nil {
 			return "", fmt.Errorf("fatal: error reading gitopia wallet")
 		}
 
-	}
+		err = json.Unmarshal(buffer, &gitopiaWallet)
+		if err != nil {
+			return "", fmt.Errorf("fatal: error decoding wallet file")
+		}
 
-	err := json.Unmarshal(buffer, &gitopiaWallet)
-	if err != nil {
-		return "", fmt.Errorf("fatal: error decoding wallet file")
-	}
+		// Generate private key
+		hdPath := gitopiaWallet.HDpath + strconv.Itoa(gitopiaWallet.PathIncrement)
+		derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", hdPath)
+		if err != nil {
+			return "", err
+		}
 
-	// Generate private key
-	hdPath := gitopiaWallet.HDpath + strconv.Itoa(gitopiaWallet.PathIncrement)
-	derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", hdPath)
-	if err != nil {
-		return "", err
-	}
+		privKey = hd.Secp256k1.Generate()(derivedPriv)
+		walletAddress = sdk.AccAddress(privKey.PubKey().Address())
+	} else {
+		useLedger = true
+		ledgerPrivKey, err = ledger.NewPrivKeySecp256k1Unsafe(hd.BIP44Params{
+			Purpose:      44,
+			CoinType:     118,
+			Account:      0,
+			Change:       false,
+			AddressIndex: 0,
+		})
+		if err != nil {
+			return "", err
+		}
 
-	privKey := hd.Secp256k1.Generate()(derivedPriv)
-	walletAddress := sdk.AccAddress(privKey.PubKey().Address())
+		walletAddress = sdk.AccAddress(ledgerPrivKey.PubKey().Address())
+	}
 
 	havePushPermission, err := h.havePushPermission(walletAddress.String())
 	if err != nil {
@@ -227,7 +256,19 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 			msg = gitopiaTypes.NewMsgDeleteTag(walletAddress.String(), h.remoteRepository.Id, remoteTagName)
 		}
 
-		err := signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+		var txBytes []byte
+		if useLedger {
+			txBytes, err = signWithLedger(h.grpcConn, walletAddress.String(), h.chainId, ledgerPrivKey, msg)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			txBytes, err = signWithWallet(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+			if err != nil {
+				return "", err
+			}
+		}
+		err = broadcastTx(h.grpcConn, txBytes)
 		if err != nil {
 			return "", err
 		}
@@ -307,7 +348,19 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return "", fmt.Errorf("fatal: not a valid branch/tag, %v", local)
 	}
 
-	err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+	var txBytes []byte
+	if useLedger {
+		txBytes, err = signWithLedger(h.grpcConn, walletAddress.String(), h.chainId, ledgerPrivKey, msg)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		txBytes, err = signWithWallet(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+		if err != nil {
+			return "", err
+		}
+	}
+	err = broadcastTx(h.grpcConn, txBytes)
 	if err != nil {
 		return "", err
 	}
