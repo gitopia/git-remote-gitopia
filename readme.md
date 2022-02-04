@@ -32,6 +32,12 @@ Building `git-remote-gitopia` requires [Go 1.16+](https://golang.org/dl/).
 make install
 ```
 
+By default, make builds with local testing configurations. If you want to build with `dev` or `prod` configurations, set an env variable `GITOPIA_ENV`
+
+```
+export GITOPIA_ENV=dev && make install
+```
+
 ## Usage
 
 `git-remote-gitopia` will be implicitly called when git encounters `gitopia://` remote.
