@@ -315,8 +315,8 @@ github.com/gballet/go-libpcsclite v0.0.0-20190607065134-2772fd86a8ff/go.mod h1:x
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/gin-contrib/sse v0.1.0/go.mod h1:RHrZQHXnP2xjPF+u1gW/2HnVO7nvIa9PG3Gm+fLHvGI=
 github.com/gin-gonic/gin v1.6.3/go.mod h1:75u5sXoLsGZoRN5Sgbi1eraJ4GU3++wFwWzhwvtwp4M=
-github.com/gitopia/gitopia v0.10.2-0.20220107024322-d6707fd7776f h1:cLBZV+JMzuMpzEjHObZYjOGfifD9CECTH8mdmpGxOPc=
-github.com/gitopia/gitopia v0.10.2-0.20220107024322-d6707fd7776f/go.mod h1:YU00ta0oLrpHuwV41elFkE+LKXdwDJl0tvmVtNTWZWI=
+github.com/gitopia/gitopia v0.12.1-0.20220216182905-76b2247de20e h1:vDam0aPaK+NN0Kcy/7iRjOEQbmQjv7M1mGtAzVx4TtQ=
+github.com/gitopia/gitopia v0.12.1-0.20220216182905-76b2247de20e/go.mod h1:YU00ta0oLrpHuwV41elFkE+LKXdwDJl0tvmVtNTWZWI=
 github.com/gliderlabs/ssh v0.2.2 h1:6zsha5zo/TWhRhwqCD3+EarCAgZ2yN28ipRnGPnwkI0=
 github.com/gliderlabs/ssh v0.2.2/go.mod h1:U7qILu1NlMHj9FlMhZLlkCdDnU1DBEAqr0aevW3Awn0=
 github.com/go-critic/go-critic v0.5.6/go.mod h1:cVjj0DfqewQVIlIAGexPCaGaZDAqGE29PYDDADIVNEo=

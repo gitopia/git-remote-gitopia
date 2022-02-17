@@ -15,7 +15,7 @@ import (
 type RemoteHandler interface {
 	List(remote *Remote, forPush bool) ([]string, error)
 	Fetch(remote *Remote, sha, ref string) error
-	Push(remote *Remote, localRef, remoteRef string) (string, error)
+	Push(remote *Remote, refsToPush []RefToPush) (*[]string, error)
 
 	Initialize(remote *Remote) error
 }
@@ -30,7 +30,13 @@ type Remote struct {
 
 	Handler RemoteHandler
 
-	todo []func() (string, error)
+	todo     []func() (string, error)
+	pushList []func() (*[]string, error)
+}
+
+type RefToPush struct {
+	Local  string
+	Remote string
 }
 
 func NewRemote(handler RemoteHandler, reader io.Reader, writer io.Writer, logger *log.Logger) (*Remote, error) {
@@ -76,14 +82,16 @@ func (r *Remote) Printf(format string, a ...interface{}) (n int, err error) {
 	return fmt.Fprintf(r.writer, format, a...)
 }
 
-func (r *Remote) push(src, dst string) {
-	r.todo = append(r.todo, func() (string, error) {
-		done, err := r.Handler.Push(r, src, dst)
+func (r *Remote) push(refsToPush []RefToPush) {
+	r.pushList = append(r.pushList, func() (*[]string, error) {
+		locals, err := r.Handler.Push(r, refsToPush)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
-		return fmt.Sprintf("ok %s\n", done), nil
+		return locals, nil
+
+		//return fmt.Sprintf("ok %s\n", done), nil, nil
 	})
 }
 
@@ -100,6 +108,8 @@ func (r *Remote) fetch(sha, ref string) {
 
 func (r *Remote) ProcessCommands() error {
 	reader := bufio.NewReader(r.reader)
+	var refsToPush []RefToPush
+	prevCommand := ""
 loop:
 	for {
 		command, err := reader.ReadString('\n')
@@ -126,13 +136,37 @@ loop:
 			r.Printf("\n")
 		case strings.HasPrefix(command, "push "):
 			refs := strings.Split(command[5:], ":")
-			r.push(refs[0], refs[1])
+			refsToPush = append(refsToPush, RefToPush{
+				Local:  refs[0],
+				Remote: refs[1],
+			})
+			//r.push(refs[0], refs[1])
 		case strings.HasPrefix(command, "fetch "):
 			parts := strings.Split(command, " ")
 			r.fetch(parts[1], parts[2])
 		case command == "":
 			fallthrough
 		case command == "\n":
+			if strings.HasPrefix(prevCommand, "push ") {
+				r.push(refsToPush)
+				var locals *[]string
+				for _, task := range r.pushList {
+					locals, err = task()
+					if err != nil {
+						return err
+					}
+				}
+				if locals != nil {
+					for _, local := range *locals {
+						r.Printf("ok %s\n", local)
+					}
+					r.Printf("\n")
+				}
+
+				r.todo = nil
+				break loop
+			}
+
 			for _, task := range r.todo {
 				resp, err := task()
 				if err != nil {
@@ -142,10 +176,13 @@ loop:
 			}
 			r.Printf("\n")
 			r.todo = nil
+
 			break loop
 		default:
 			return fmt.Errorf("received unknown command %q", command)
 		}
+
+		prevCommand = command
 	}
 
 	return nil

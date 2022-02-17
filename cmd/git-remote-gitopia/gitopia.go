@@ -162,7 +162,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 	return nil
 }
 
-func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef string) (string, error) {
+func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) (*[]string, error) {
 	var gitopiaWallet GitopiaWallet
 	var buffer []byte
 	h.didPush = true
@@ -175,27 +175,27 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	} else {
 		gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
 		if gitopiaWalletPath == "" {
-			return "", fmt.Errorf("fatal: GITOPIA_WALLET environment variable is not set")
+			return nil, fmt.Errorf("fatal: GITOPIA_WALLET environment variable is not set")
 		}
 
 		var err error
 		buffer, err = os.ReadFile(gitopiaWalletPath)
 		if err != nil {
-			return "", fmt.Errorf("fatal: error reading gitopia wallet")
+			return nil, fmt.Errorf("fatal: error reading gitopia wallet")
 		}
 
 	}
 
 	err := json.Unmarshal(buffer, &gitopiaWallet)
 	if err != nil {
-		return "", fmt.Errorf("fatal: error decoding wallet file")
+		return nil, fmt.Errorf("fatal: error decoding wallet file")
 	}
 
 	// Generate private key
 	hdPath := gitopiaWallet.HDpath + strconv.Itoa(gitopiaWallet.PathIncrement)
 	derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", hdPath)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	privKey := hd.Secp256k1.Generate()(derivedPriv)
@@ -203,37 +203,15 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 
 	havePushPermission, err := h.havePushPermission(walletAddress.String())
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if !havePushPermission {
-		return "", fmt.Errorf("fatal: you don't have write permissions to this repository")
+		return nil, fmt.Errorf("fatal: you don't have write permissions to this repository")
 	}
 
 	var msg sdk.Msg
 
 	// Delete branch/tag
-	if local == "" {
-		if strings.HasPrefix(remoteRef, branchPrefix) {
-			remoteBranchName := strings.TrimPrefix(remoteRef, branchPrefix)
-
-			// Check if it's the default branch
-			if remoteBranchName == h.remoteRepository.DefaultBranch {
-				return "", fmt.Errorf("fatal: cannot delete default branch, %v", remoteBranchName)
-			}
-
-			msg = gitopiaTypes.NewMsgDeleteBranch(walletAddress.String(), h.remoteRepository.Id, remoteBranchName)
-		} else if strings.HasPrefix(remoteRef, tagPrefix) {
-			remoteTagName := strings.TrimPrefix(remoteRef, tagPrefix)
-			msg = gitopiaTypes.NewMsgDeleteTag(walletAddress.String(), h.remoteRepository.Id, remoteTagName)
-		}
-
-		err := signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
-		if err != nil {
-			return "", err
-		}
-
-		return local, nil
-	}
 
 	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
 	remoteConfig := &goGitConfig.RemoteConfig{
@@ -243,73 +221,135 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 
 	_, err = remote.Repo.CreateRemote(remoteConfig)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer remote.Repo.DeleteRemote("gitopia-objects-store")
 
-	force := false
-	if strings.HasPrefix(local, "+") {
-		local = strings.TrimPrefix(local, "+")
-		force = true
-	}
-
-	pushOptions := &git.PushOptions{
-		RemoteName: "gitopia-objects-store",
-		RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", local, remoteRef))},
-		Progress:   os.Stdout,
-		Force:      force,
-	}
-
-	err = remote.Repo.Push(pushOptions)
-	if err != nil && err != git.NoErrAlreadyUpToDate {
-		return "", fmt.Errorf("fatal: error pushing the git objects, %v", err.Error())
-	}
-
 	var newRemoteRefSha, prevRemoteRefSha string
+	var setBranches []*gitopiaTypes.MsgMultiSetRepositoryBranch_Branch
+	var setTags []*gitopiaTypes.MsgMultiSetRepositoryTag_Tag
+	var deleteBranches, deleteTags []string
+	var res []string
 
-	// Update ref on gitopia
-	if strings.HasPrefix(local, branchPrefix) {
-		localCommitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(local))
-		if err != nil {
-			return "", fmt.Errorf("fatal: local branch %s doesn't exist", local)
-		}
-		newRemoteRefSha = localCommitHash.String()
+	for _, ref := range refsToPush {
+		if ref.Local == "" {
+			if strings.HasPrefix(ref.Remote, branchPrefix) {
+				remoteBranchName := strings.TrimPrefix(ref.Remote, branchPrefix)
 
-		remoteBranchName := strings.TrimPrefix(remoteRef, branchPrefix)
-		branchShaResponse, err := h.queryClient.BranchSha(context.Background(), &gitopiaTypes.QueryGetBranchShaRequest{
-			RepositoryId: h.remoteRepository.Id,
-			BranchName:   remoteBranchName,
-		})
-		if err == nil {
-			prevRemoteRefSha = branchShaResponse.Sha
-		}
+				// Check if it's the default branch
+				if remoteBranchName == h.remoteRepository.DefaultBranch {
+					return nil, fmt.Errorf("fatal: cannot delete default branch, %v", remoteBranchName)
+				}
 
-		msg = gitopiaTypes.NewMsgSetRepositoryBranch(walletAddress.String(), h.remoteRepository.Id, remoteBranchName, newRemoteRefSha)
-	} else if strings.HasPrefix(local, tagPrefix) {
-		localTagName := strings.TrimPrefix(local, tagPrefix)
-		ref, err := remote.Repo.Tag(localTagName)
-		if err != nil {
-			return "", fmt.Errorf("fatal: invalid tag name, %v", localTagName)
-		}
-		newRemoteRefSha = ref.Hash().String()
+				deleteBranches = append(deleteBranches, remoteBranchName)
+				res = append(res, ref.Local)
+			} else if strings.HasPrefix(refsToPush[0].Remote, tagPrefix) {
+				remoteTagName := strings.TrimPrefix(refsToPush[0].Remote, tagPrefix)
+				deleteTags = append(deleteTags, remoteTagName)
+				res = append(res, ref.Local)
+			}
 
-		remoteTagName := strings.TrimPrefix(remoteRef, tagPrefix)
-		tagShaResponse, err := h.queryClient.TagSha(context.Background(), &gitopiaTypes.QueryGetTagShaRequest{
-			RepositoryId: h.remoteRepository.Id,
-			TagName:      remoteTagName,
-		})
-		if err == nil {
-			prevRemoteRefSha = tagShaResponse.Sha
+			continue
 		}
 
-		msg = gitopiaTypes.NewMsgSetRepositoryTag(walletAddress.String(), h.remoteRepository.Id, remoteTagName, newRemoteRefSha)
-	} else {
-		return "", fmt.Errorf("fatal: not a valid branch/tag, %v", local)
+		force := false
+		if strings.HasPrefix(ref.Local, "+") {
+			ref.Local = strings.TrimPrefix(ref.Local, "+")
+			force = true
+		}
+
+		pushOptions := &git.PushOptions{
+			RemoteName: "gitopia-objects-store",
+			RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", ref.Local, ref.Remote))},
+			Progress:   os.Stdout,
+			Force:      force,
+		}
+
+		err = remote.Repo.Push(pushOptions)
+		if err != nil && err != git.NoErrAlreadyUpToDate {
+			return nil, fmt.Errorf("fatal: error pushing the git objects, %v", err.Error())
+		}
+
+		// Update ref on gitopia
+		if strings.HasPrefix(ref.Local, branchPrefix) {
+			localCommitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(ref.Local))
+			if err != nil {
+				return nil, fmt.Errorf("fatal: local branch %s doesn't exist", ref.Local)
+			}
+			newRemoteRefSha = localCommitHash.String()
+
+			remoteBranchName := strings.TrimPrefix(ref.Remote, branchPrefix)
+			branchShaResponse, err := h.queryClient.BranchSha(context.Background(), &gitopiaTypes.QueryGetBranchShaRequest{
+				RepositoryId: h.remoteRepository.Id,
+				BranchName:   remoteBranchName,
+			})
+			if err == nil {
+				prevRemoteRefSha = branchShaResponse.Sha
+			}
+
+			branch := gitopiaTypes.MsgMultiSetRepositoryBranch_Branch{
+				Name:      remoteBranchName,
+				CommitSHA: newRemoteRefSha,
+			}
+
+			setBranches = append(setBranches, &branch)
+			res = append(res, ref.Local)
+		} else if strings.HasPrefix(ref.Local, tagPrefix) {
+			localTagName := strings.TrimPrefix(ref.Local, tagPrefix)
+			tagRef, err := remote.Repo.Tag(localTagName)
+			if err != nil {
+				return nil, fmt.Errorf("fatal: invalid tag name, %v", localTagName)
+			}
+			newRemoteRefSha = tagRef.Hash().String()
+
+			remoteTagName := strings.TrimPrefix(ref.Remote, tagPrefix)
+			tagShaResponse, err := h.queryClient.TagSha(context.Background(), &gitopiaTypes.QueryGetTagShaRequest{
+				RepositoryId: h.remoteRepository.Id,
+				TagName:      remoteTagName,
+			})
+			if err == nil {
+				prevRemoteRefSha = tagShaResponse.Sha
+			}
+
+			tag := gitopiaTypes.MsgMultiSetRepositoryTag_Tag{
+				Name:      remoteTagName,
+				CommitSHA: newRemoteRefSha,
+			}
+
+			setTags = append(setTags, &tag)
+			res = append(res, ref.Local)
+		} else {
+			return nil, fmt.Errorf("fatal: not a valid branch/tag, %v", ref.Local)
+		}
 	}
 
-	err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
-	if err != nil {
-		return "", err
+	if len(setBranches) > 0 {
+		msg = gitopiaTypes.NewMsgMultiSetRepositoryBranch(walletAddress.String(), h.remoteRepository.Id, setBranches)
+		err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(setTags) > 0 {
+		msg = gitopiaTypes.NewMsgMultiSetRepositoryTag(walletAddress.String(), h.remoteRepository.Id, setTags)
+		err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(deleteBranches) > 0 {
+		msg = gitopiaTypes.NewMsgMultiDeleteBranch(walletAddress.String(), h.remoteRepository.Id, deleteBranches)
+		err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(deleteTags) > 0 {
+		msg = gitopiaTypes.NewMsgMultiDeleteTag(walletAddress.String(), h.remoteRepository.Id, deleteTags)
+		err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	_ = prevRemoteRefSha
@@ -337,7 +377,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 	// 	return "", fmt.Errorf("fatal: error saving to Arweave")
 	// }
 
-	return local, nil
+	return &res, nil
 }
 
 func (h *GitopiaHandler) havePushPermission(walletAddress string) (bool, error) {

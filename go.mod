@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	github.com/cosmos/cosmos-sdk v0.44.3
-	github.com/gitopia/gitopia v0.10.2-0.20220107024322-d6707fd7776f
+	github.com/gitopia/gitopia v0.12.1-0.20220216182905-76b2247de20e
 	github.com/go-git/go-git/v5 v5.4.2
 	google.golang.org/grpc v1.43.0
 )
