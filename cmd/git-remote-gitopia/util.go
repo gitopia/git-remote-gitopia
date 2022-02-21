@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cosmos/cosmos-sdk/client"
 	clientTx "github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/types"
@@ -19,6 +20,10 @@ import (
 	authtype "github.com/cosmos/cosmos-sdk/x/auth/types"
 
 	"google.golang.org/grpc"
+)
+
+const (
+	GAS_ADJUSTMENT = 1.2
 )
 
 func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, privKey cryptotypes.PrivKey, msg sdk.Msg) error {
@@ -40,7 +45,6 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 
 	txBuilder := txCfg.NewTxBuilder()
 	txBuilder.SetMsgs(msg)
-	txBuilder.SetGasLimit(200000)
 
 	res, err := accountQueryClient.Account(context.Background(),
 		&authtype.QueryAccountRequest{
@@ -64,6 +68,12 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 	if err != nil {
 		return err
 	}
+
+	gas, err := calculateGas(cc, txClient, txCfg, txBuilder)
+	if err != nil {
+		return err
+	}
+	txBuilder.SetGasLimit(gas)
 
 	signerData := xauthsigning.SignerData{
 		ChainID:       chainId,
@@ -97,7 +107,7 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 	grpcRes, err = txClient.BroadcastTx(
 		context.Background(),
 		&tx.BroadcastTxRequest{
-			Mode:    tx.BroadcastMode_BROADCAST_MODE_SYNC,
+			Mode:    tx.BroadcastMode_BROADCAST_MODE_BLOCK,
 			TxBytes: txBytes,
 		},
 	)
@@ -110,4 +120,22 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 	}
 
 	return nil
+}
+
+func calculateGas(cc *grpc.ClientConn, txClient tx.ServiceClient, txCfg client.TxConfig, txBuilder client.TxBuilder) (uint64, error) {
+	txBytes, err := txCfg.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return 0, err
+	}
+
+	simRes, err := txClient.Simulate(context.Background(), &tx.SimulateRequest{
+		TxBytes: txBytes,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	gas := uint64(GAS_ADJUSTMENT * float64(simRes.GasInfo.GasUsed))
+
+	return gas, nil
 }
