@@ -354,5 +354,5 @@ func (h *GitopiaHandler) havePushPermission(walletAddress string) (bool, error) 
 		o = *res.Organization
 	}
 
-	return utils.HaveBranchPermission(h.remoteRepository, walletAddress, o), nil
+	return utils.HavePermission(h.remoteRepository, walletAddress, utils.PushBranchPermission, o), nil
 }
