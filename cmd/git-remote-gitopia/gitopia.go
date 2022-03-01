@@ -242,11 +242,11 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 				}
 
 				deleteBranches = append(deleteBranches, remoteBranchName)
-				res = append(res, ref.Local)
+				res = append(res, ref.Remote)
 			} else if strings.HasPrefix(refsToPush[0].Remote, tagPrefix) {
 				remoteTagName := strings.TrimPrefix(refsToPush[0].Remote, tagPrefix)
 				deleteTags = append(deleteTags, remoteTagName)
-				res = append(res, ref.Local)
+				res = append(res, ref.Remote)
 			}
 
 			continue
@@ -293,7 +293,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			}
 
 			setBranches = append(setBranches, &branch)
-			res = append(res, ref.Local)
+			res = append(res, ref.Remote)
 		} else if strings.HasPrefix(ref.Local, tagPrefix) {
 			localTagName := strings.TrimPrefix(ref.Local, tagPrefix)
 			tagRef, err := remote.Repo.Tag(localTagName)
@@ -317,7 +317,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			}
 
 			setTags = append(setTags, &tag)
-			res = append(res, ref.Local)
+			res = append(res, ref.Remote)
 		} else {
 			return nil, fmt.Errorf("fatal: not a valid branch/tag, %v", ref.Local)
 		}
