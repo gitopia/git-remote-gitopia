@@ -11,6 +11,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
@@ -24,8 +25,6 @@ import (
 
 const (
 	AccountAddressPrefix = "gitopia"
-	apiURL               = "34.93.81.34:9090"
-	objectsURL           = "http://35.200.147.237:5000/"
 	saveToArweaveURL     = "http://35.200.147.237:5000/save"
 	branchPrefix         = "refs/heads/"
 	tagPrefix            = "refs/tags/"
@@ -72,7 +71,7 @@ type GitopiaHandler struct {
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	var err error
 
-	h.grpcConn, err = grpc.Dial(apiURL,
+	h.grpcConn, err = grpc.Dial(config.GRPCHost,
 		grpc.WithInsecure(),
 	)
 	if err != nil {
@@ -137,7 +136,7 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 }
 
 func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
-	remoteURL := fmt.Sprintf("%v/%v.git", objectsURL, h.remoteRepository.Id)
+	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
 	remoteConfig := &goGitConfig.RemoteConfig{
 		Name: "gitopia-objects-store",
 		URLs: []string{remoteURL},
@@ -235,7 +234,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, local string, remoteRef strin
 		return local, nil
 	}
 
-	remoteURL := fmt.Sprintf("%v/%v.git", objectsURL, h.remoteRepository.Id)
+	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
 	remoteConfig := &goGitConfig.RemoteConfig{
 		Name: "gitopia-objects-store",
 		URLs: []string{remoteURL},
