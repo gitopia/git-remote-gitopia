@@ -151,6 +151,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 	fetchOptions := &git.FetchOptions{
 		RemoteName: "gitopia-objects-store",
 		Progress:   os.Stdout,
+		Tags:       git.TagMode(3),
 	}
 
 	err = remote.Repo.Fetch(fetchOptions)
