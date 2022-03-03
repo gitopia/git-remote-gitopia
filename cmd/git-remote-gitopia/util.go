@@ -177,6 +177,8 @@ func signWithLedger(cc *grpc.ClientConn, sender string, chainId string, ledgerPr
 		return nil, err
 	}
 
+	// TODO: Gives error in case of large msg
+	// JSON. Too many tokens
 	sigBytes, err := ledgerPrivKey.Sign(bytesToSign)
 	if err != nil {
 		return nil, err
