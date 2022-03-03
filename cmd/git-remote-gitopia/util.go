@@ -26,7 +26,7 @@ const (
 	GAS_ADJUSTMENT = 1.2
 )
 
-func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, privKey cryptotypes.PrivKey, msg sdk.Msg) error {
+func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, privKey cryptotypes.PrivKey, msg []sdk.Msg) error {
 	accountQueryClient := authtype.NewQueryClient(cc)
 	txClient := tx.NewServiceClient(cc)
 
@@ -44,7 +44,7 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 	txCfg := authtx.NewTxConfig(marshaler, authtx.DefaultSignModes)
 
 	txBuilder := txCfg.NewTxBuilder()
-	txBuilder.SetMsgs(msg)
+	txBuilder.SetMsgs(msg...)
 
 	res, err := accountQueryClient.Account(context.Background(),
 		&authtype.QueryAccountRequest{
@@ -107,7 +107,7 @@ func signAndBroadcastTx(cc *grpc.ClientConn, sender string, chainId string, priv
 	grpcRes, err = txClient.BroadcastTx(
 		context.Background(),
 		&tx.BroadcastTxRequest{
-			Mode:    tx.BroadcastMode_BROADCAST_MODE_BLOCK,
+			Mode:    tx.BroadcastMode_BROADCAST_MODE_SYNC,
 			TxBytes: txBytes,
 		},
 	)
