@@ -209,7 +209,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, fmt.Errorf("fatal: you don't have write permissions to this repository")
 	}
 
-	var msg sdk.Msg
+	var msg []sdk.Msg
 
 	// Delete branch/tag
 
@@ -324,32 +324,21 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	}
 
 	if len(setBranches) > 0 {
-		msg = gitopiaTypes.NewMsgMultiSetRepositoryBranch(walletAddress.String(), h.remoteRepository.Id, setBranches)
-		err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
-		if err != nil {
-			return nil, err
-		}
+		msg = append(msg, gitopiaTypes.NewMsgMultiSetRepositoryBranch(walletAddress.String(), h.remoteRepository.Id, setBranches))
 	}
 	if len(setTags) > 0 {
-		msg = gitopiaTypes.NewMsgMultiSetRepositoryTag(walletAddress.String(), h.remoteRepository.Id, setTags)
-		err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
-		if err != nil {
-			return nil, err
-		}
+		msg = append(msg, gitopiaTypes.NewMsgMultiSetRepositoryTag(walletAddress.String(), h.remoteRepository.Id, setTags))
 	}
 	if len(deleteBranches) > 0 {
-		msg = gitopiaTypes.NewMsgMultiDeleteBranch(walletAddress.String(), h.remoteRepository.Id, deleteBranches)
-		err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
-		if err != nil {
-			return nil, err
-		}
+		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteBranch(walletAddress.String(), h.remoteRepository.Id, deleteBranches))
 	}
 	if len(deleteTags) > 0 {
-		msg = gitopiaTypes.NewMsgMultiDeleteTag(walletAddress.String(), h.remoteRepository.Id, deleteTags)
-		err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
-		if err != nil {
-			return nil, err
-		}
+		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteTag(walletAddress.String(), h.remoteRepository.Id, deleteTags))
+	}
+
+	err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, msg)
+	if err != nil {
+		return nil, err
 	}
 
 	_ = prevRemoteRefSha
