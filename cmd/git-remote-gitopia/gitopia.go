@@ -224,7 +224,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			AddressIndex: 0,
 		})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("fatal: Gitopia wallet is not configured! Set GITOPIA_WALLET environment variable or use Ledger")
 		}
 
 		walletAddress = sdk.AccAddress(ledgerPrivKey.PubKey().Address())
