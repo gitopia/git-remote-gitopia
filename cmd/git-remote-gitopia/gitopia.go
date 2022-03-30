@@ -23,6 +23,7 @@ import (
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -74,7 +75,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	var err error
 
 	h.grpcConn, err = grpc.Dial(config.GRPCHost,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return err
@@ -102,9 +103,9 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.remoteRepository = *res.Repository
 
-	config := sdk.GetConfig()
-	config.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
-	config.Seal()
+	sdkConfig := sdk.GetConfig()
+	sdkConfig.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
+	sdkConfig.Seal()
 
 	return nil
 }
