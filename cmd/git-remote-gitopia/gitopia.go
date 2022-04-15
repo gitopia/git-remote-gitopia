@@ -17,11 +17,10 @@ import (
 	core "github.com/gitopia/git-remote-gitopia/core"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
-
-	// "github.com/gitopia/gitopia/x/gitopia/utils"
 	"github.com/go-git/go-git/v5"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -405,7 +404,7 @@ func (h *GitopiaHandler) havePushPermission(walletAddress string) (bool, error) 
 			Id: h.remoteRepository.Owner.Id,
 		})
 		if err != nil {
-			return false, fmt.Errorf("fatal: organization doesn't exist")
+			return false, errors.WithMessage(err, "fatal: organization doesn't exist")
 		}
 
 		o = *res.Organization

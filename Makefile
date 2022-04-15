@@ -1,4 +1,4 @@
-GITOPIA_ENV ?= testing
+GITOPIA_ENV ?= prod
 LEDGER_ENABLED ?= true
 
 build_tags = netgo
@@ -29,17 +29,65 @@ build_tags += $(BUILD_TAGS)
 build_tags := $(strip $(build_tags))
 BUILD_FLAGS := -tags "$(build_tags) $(GITOPIA_ENV)"
 
-all: install
+appname := git-remote-gitopia
+version := 0.4.0
+
+build = GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/$(appname)$(3) ./cmd/git-remote-gitopia
+tar = cd build && tar -cvzf $(appname)_$(version)_$(1)_$(2).tar.gz $(appname)$(3) && rm $(appname)$(3)
+zip = cd build && zip $(appname)_$(version)_$(1)_$(2).zip $(appname)$(3) && rm $(appname)$(3)
 
 .PHONY: build
 
-build:
-		@go build -tags $(GITOPIA_ENV) -o build/ ./cmd/git-remote-gitopia
+all: windows darwin linux
+
+clean:
+	rm -rf build/
+
+##### LINUX BUILDS #####
+linux: build/$(appname)_$(version)_linux_arm.tar.gz build/$(appname)_$(version)_linux_arm64.tar.gz build/$(appname)_$(version)_linux_386.tar.gz build/$(appname)_$(version)_linux_amd64.tar.gz
+
+build/$(appname)_$(version)_linux_386.tar.gz:
+	$(call build,linux,386,)
+	$(call tar,linux,386)
+
+build/$(appname)_$(version)_linux_amd64.tar.gz:
+	$(call build,linux,amd64,)
+	$(call tar,linux,amd64)
+
+build/$(appname)_$(version)_linux_arm.tar.gz:
+	$(call build,linux,arm,)
+	$(call tar,linux,arm)
+
+build/$(appname)_$(version)_linux_arm64.tar.gz:
+	$(call build,linux,arm64,)
+	$(call tar,linux,arm64)
+
+##### DARWIN (MAC) BUILDS #####
+darwin: build/$(appname)_$(version)_darwin_amd64.tar.gz build/$(appname)_$(version)_darwin_arm64.tar.gz
+
+build/$(appname)_$(version)_darwin_arm64.tar.gz:
+	$(call build,darwin,arm64,)
+	$(call tar,darwin,arm64)
+
+build/$(appname)_$(version)_darwin_amd64.tar.gz:
+	$(call build,darwin,amd64,)
+	$(call tar,darwin,amd64)
+
+##### WINDOWS BUILDS #####
+windows: build/$(appname)_$(version)_windows_386.zip build/$(appname)_$(version)_windows_amd64.zip
+
+build/$(appname)_$(version)_windows_386.zip:
+	$(call build,windows,386,.exe)
+	$(call zip,windows,386,.exe)
+
+build/$(appname)_$(version)_windows_amd64.zip:
+	$(call build,windows,amd64,.exe)
+	$(call zip,windows,amd64,.exe)
 
 install: go.sum
-		@echo "--> Installing git-remote-gitopia"
-		@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-remote-gitopia
+	@echo "--> Installing git-remote-gitopia"
+	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-remote-gitopia
 
 go.sum: go.mod
-		@echo "--> Ensure dependencies have not been modified"
-		GO111MODULE=on go mod verify
+	@echo "--> Ensure dependencies have not been modified"
+	GO111MODULE=on go mod verify
