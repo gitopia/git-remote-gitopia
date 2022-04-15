@@ -1,4 +1,4 @@
-GITOPIA_ENV ?= testing
+GITOPIA_ENV ?= prod
 LEDGER_ENABLED ?= true
 
 build_tags = netgo
@@ -87,7 +87,6 @@ build/$(appname)_$(version)_windows_amd64.zip:
 install: go.sum
 	@echo "--> Installing git-remote-gitopia"
 	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-remote-gitopia
-	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-gitopia
 
 go.sum: go.mod
 	@echo "--> Ensure dependencies have not been modified"
