@@ -3,6 +3,6 @@
 package config
 
 const (
-	GRPCHost      = "grpc.gitopia.dev:9090"
-	GitServerHost = "https://server.gitopia.dev"
+	GRPCHost      = "grpc.gitopia.com:9090"
+	GitServerHost = "https://server.gitopia.com"
 )
