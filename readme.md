@@ -32,8 +32,9 @@ Building `git-remote-gitopia` requires [Go 1.16+](https://golang.org/dl/).
 make install
 ```
 
-By default, make builds with local testing configurations. If you want to build with `dev` or `prod` configurations, set an env variable `GITOPIA_ENV`
+By default, make builds with production configurations. If you want to build with `dev` or `testing` configurations, set an env variable `GITOPIA_ENV` with respective value
 
+For example, you can build with dev configurations using the following command
 ```
 export GITOPIA_ENV=dev && make install
 ```
