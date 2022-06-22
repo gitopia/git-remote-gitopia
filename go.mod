@@ -6,6 +6,7 @@ require (
 	github.com/cosmos/cosmos-sdk v0.45.0
 	github.com/gitopia/gitopia v0.12.1-0.20220302171918-ccf7c17f9817
 	github.com/go-git/go-git/v5 v5.4.2
+	github.com/spf13/cobra v1.2.1 // indirect
 	google.golang.org/grpc v1.43.0
 )
 
