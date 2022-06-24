@@ -14,7 +14,7 @@ func main(){
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, client.ClientContextKey, &client.Context{})
 	cmd := &cobra.Command{
-		Use:               "git-gitopia",
+		Use:               "gitopia",
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			initClientCtx := client.Context{}.
