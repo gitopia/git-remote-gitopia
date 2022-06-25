@@ -1,5 +1,5 @@
 # gitopia keys
-gitopia subcommand for git for mananging gitopiad keys
+git subcommand for managing gitopiad keys
 
 ## installation
 ```

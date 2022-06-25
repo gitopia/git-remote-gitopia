@@ -34,6 +34,7 @@ const (
 	saveToArweaveURL       = "http://35.200.147.237:5000/save"
 	branchPrefix           = "refs/heads/"
 	tagPrefix              = "refs/tags/"
+	defaultFees            = "200utlore"
 )
 
 var (
@@ -134,7 +135,9 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	conf := sdk.GetConfig()
 	conf.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
-	conf.Seal()
+	// cannot seal the config
+	// cosmos client sets address prefix for each broadcasttx API call. probably a bug
+	// conf.Seal()
 
 	h.cc, err = cosmosclient.New(context.Background(),
 		cosmosclient.WithNodeAddress(config.TmAddr),
@@ -145,6 +148,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	if err != nil {
 		return err
 	}
+	h.cc.Factory = h.cc.Factory.WithFees(defaultFees)
 
 	return nil
 }
