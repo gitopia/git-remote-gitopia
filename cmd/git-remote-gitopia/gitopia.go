@@ -279,9 +279,6 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			return nil, err
 		}
 		walletAddress = wa
-		if err != nil {
-			return nil, err
-		}
 	} else {
 		return nil, errors.New("gitopia key or wallet not set")
 	}
