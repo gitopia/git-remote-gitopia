@@ -25,6 +25,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -225,9 +226,13 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 
 func (h *GitopiaHandler) initGitopiaWallet() (string, error) {
 	var gitopiaWallet GitopiaWallet
+	var walletAddress sdk.AccAddress
+	var privKey cryptotypes.PrivKey
+	var ledgerPrivKey cryptotypes.LedgerPrivKey
 	var buffer []byte
 	var err error
 	h.didPush = true
+	var useLedger bool
 
 	// Read wallet
 	isGitHubAction := os.Getenv("GITHUB_ACTIONS")
