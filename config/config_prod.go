@@ -1,4 +1,3 @@
-//go:build prod
 // +build prod
 
 package config
