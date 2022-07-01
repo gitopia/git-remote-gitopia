@@ -10,6 +10,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -29,14 +30,15 @@ import (
 )
 
 const (
-	AppName                = "gitopia"
-	AccountAddressPrefix   = "gitopia"
-	gitopiaConfigSection   = "gitopia"
-	gitopiaConfigKeyOption = "key"
-	saveToArweaveURL       = "http://35.200.147.237:5000/save"
-	branchPrefix           = "refs/heads/"
-	tagPrefix              = "refs/tags/"
-	defaultFees            = "200utlore"
+	AppName                    = "gitopia"
+	AccountAddressPrefix       = "gitopia"
+	gitopiaConfigSection       = "gitopia"
+	gitopiaConfigKeyOption     = "key"
+	gitopiaConfigBackendOption = "backend"
+	saveToArweaveURL           = "http://35.200.147.237:5000/save"
+	branchPrefix               = "refs/heads/"
+	tagPrefix                  = "refs/tags/"
+	defaultFees                = "200utlore"
 )
 
 var (
@@ -49,7 +51,7 @@ type Account struct {
 }
 
 type GitopiaWallet struct {
-	Name          string    `json:"name"`
+	Name          string    `json:"name"` 
 	Mnemonic      string    `json:"mnemonic"`
 	HDpath        string    `json:"HDpath"`
 	Password      string    `json:"password"`
@@ -93,9 +95,28 @@ const (
 	UNKNOWN secretType = iota
 	ENV_VAR
 	LEDGER
-	OS_KEYRING
+	KEYRING_BACKEND
 	GITHIB_SEC
 )
+
+type keyringBackend struct {
+	key     string
+	backend string
+	cc      cosmosclient.Client
+}
+
+func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend {
+	c.Factory = c.Factory.WithFees(defaultFees)
+	return keyringBackend{
+		key:     k,
+		backend: b,
+		cc:      c,
+	}
+}
+
+func (k keyringBackend) address()(sdk.Address, error) {
+	return k.cc.Address(k.key)
+}
 
 type GitopiaHandler struct {
 	grpcConn    *grpc.ClientConn
@@ -109,11 +130,9 @@ type GitopiaHandler struct {
 	didPush bool
 
 	secType          secretType
-	gWallet          *GitopiaWallet
-	key              string
-	ledgerPrivateKey cryptotypes.LedgerPrivKey
-
-	cc cosmosclient.Client
+	gWallet          *GitopiaWallet            // ENV_VAR
+	kb               keyringBackend            // KEYRING_BACKEND
+	ledgerPrivateKey cryptotypes.LedgerPrivKey // LEDGER
 }
 
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
@@ -153,18 +172,6 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	// cannot seal the config
 	// cosmos client sets address prefix for each broadcasttx API call. probably a bug
 	// conf.Seal()
-
-	h.cc, err = cosmosclient.New(context.Background(),
-		cosmosclient.WithNodeAddress(config.TmAddr),
-		cosmosclient.WithKeyringServiceName(AppName), // not suported on macos
-		cosmosclient.WithKeyringBackend(cosmosaccount.KeyringOS),
-		cosmosclient.WithAddressPrefix(AccountAddressPrefix),
-	)
-	if err != nil {
-		return err
-	}
-	h.cc.Factory = h.cc.Factory.WithFees(defaultFees)
-
 	return nil
 }
 
@@ -260,19 +267,41 @@ func (h *GitopiaHandler) initGitopiaWallet() (string, error) {
 }
 
 func (h *GitopiaHandler) initGitopiaKey() (string, error) {
+	var key string
+	var backend string
+	var cc cosmosclient.Client
 	conf, err := goGitConfig.LoadConfig(goGitConfig.GlobalScope)
 	if err != nil {
 		return "", err
 	}
 	if conf.Raw.HasSection(gitopiaConfigSection) &&
 		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigKeyOption) {
-		h.key = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigKeyOption)
+		key = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigKeyOption)
 	} else {
 		return "", errors.New("gitopia key not configured")
 	}
 
-	h.secType = OS_KEYRING
-	wa, err := h.cc.Address(h.key)
+	if conf.Raw.HasSection(gitopiaConfigSection) &&
+		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigBackendOption) {
+		backend = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigBackendOption)
+	} else {
+		backend = keyring.BackendOS // default to OS. same as cosmos keys subcommand
+	}
+
+	h.secType = KEYRING_BACKEND
+	cc, err = cosmosclient.New(context.Background(),
+		cosmosclient.WithNodeAddress(config.TmAddr),
+		// same service name used in both helper and keys management app
+		cosmosclient.WithKeyringServiceName(AppName),                                // not suported on macos
+		cosmosclient.WithKeyringBackend(cosmosaccount.KeyringBackend(backend)), // not all backends supported by cosmos are supported by cosmos client
+		cosmosclient.WithAddressPrefix(AccountAddressPrefix),
+	)
+	if err != nil {
+		return "", err
+	}
+	h.kb = newKeyringBackend(key, backend, cc)
+
+	wa, err := h.kb.address()
 	if err != nil {
 		return "", err
 	}
@@ -453,8 +482,8 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteTag(walletAddress, h.remoteRepository.Id, deleteTags))
 	}
 
-	if h.secType == OS_KEYRING {
-		txResp, err := h.cc.BroadcastTx(h.key, msg...)
+	if h.secType == KEYRING_BACKEND {
+		txResp, err := h.kb.cc.BroadcastTx(h.kb.key, msg...)
 		if err != nil {
 			return nil, err
 		}

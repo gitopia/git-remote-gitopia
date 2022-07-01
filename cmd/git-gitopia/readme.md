@@ -16,4 +16,5 @@ git gitopia keys add <key-name> --recover
 ## configure key
 ```
 git config --global gitopia.key <key-name>
+git config --global gitopia.backend <keyring-backend>
 ```
