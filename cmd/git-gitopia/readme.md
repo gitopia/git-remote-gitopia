@@ -8,9 +8,9 @@ make install
 
 ## Usage
 use cosmos keys subcommand to manage keys 
-ex: import key
+ex: recover key
 ```
-git gitopia keys import <key-name> <keyfile>
+git gitopia keys add <key-name> --recover
 ```
 
 ## configure key

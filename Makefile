@@ -33,11 +33,11 @@ appname := git-remote-gitopia
 version := 0.4.2
 
 build = GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/$(appname)$(3) ./cmd/git-remote-gitopia && \
-    GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/git-gitopia$(3) ./cmd/git-gitopia-keys
-tar = cd build && tar -cvzf $(appname)_$(version)_$(1)_$(2).tar.gz $(appname)$(3) git-gitopia$(3) \
-    && rm $(appname)$(3) && rm git-gitopia$(3)
-zip = cd build && zip $(appname)_$(version)_$(1)_$(2).zip $(appname)$(3) && rm $(appname)$(3) && \
-    zip $(appname)_$(version)_$(1)_$(2).zip git-gitopia$(3) && rm git-gitopia$(3) 
+    GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/git-gitopia$(3) ./cmd/git-gitopia
+tar = cd build && tar -cvzf $(appname)_$(version)_$(1)_$(2).tar.gz $(appname)$(3) git-gitopia$(3) && \
+    rm $(appname)$(3) && rm git-gitopia$(3)
+zip = cd build && zip $(appname)_$(version)_$(1)_$(2).zip $(appname)$(3) git-gitopia$(3) && \
+    rm $(appname)$(3) && rm git-gitopia$(3) 
 
 .PHONY: build
 
@@ -90,8 +90,7 @@ build/$(appname)_$(version)_windows_amd64.zip:
 install: go.sum
 	@echo "--> Installing git-remote-gitopia"
 	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-remote-gitopia
-	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-gitopia-keys
-	mv $(GOBIN)/git-gitopia-keys $(GOBIN)/git-gitopia
+	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-gitopia
 
 go.sum: go.mod
 	@echo "--> Ensure dependencies have not been modified"

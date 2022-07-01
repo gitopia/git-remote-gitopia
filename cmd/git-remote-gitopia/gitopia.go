@@ -21,7 +21,6 @@ import (
 	"github.com/tendermint/starport/starport/pkg/cosmosaccount"
 	"github.com/tendermint/starport/starport/pkg/cosmosclient"
 
-	// "github.com/gitopia/gitopia/x/gitopia/utils"
 	"github.com/go-git/go-git/v5"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -40,7 +39,7 @@ const (
 )
 
 var (
-	AccountPubKeyPrefix = AccountAddressPrefix + "pub"
+	AccountPubKeyPrefix = AccountAddressPrefix + sdk.PrefixPublic
 )
 
 type Account struct {
