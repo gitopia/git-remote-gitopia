@@ -29,6 +29,7 @@ import (
 )
 
 const (
+	AppName                = "gitopia"
 	AccountAddressPrefix   = "gitopia"
 	gitopiaConfigSection   = "gitopia"
 	gitopiaConfigKeyOption = "key"
@@ -155,7 +156,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.cc, err = cosmosclient.New(context.Background(),
 		cosmosclient.WithNodeAddress(config.TmAddr),
-		//cosmosclient.WithKeyringServiceName("cosmos"), // not suported on macos
+		cosmosclient.WithKeyringServiceName(AppName), // not suported on macos
 		cosmosclient.WithKeyringBackend(cosmosaccount.KeyringOS),
 		cosmosclient.WithAddressPrefix(AccountAddressPrefix),
 	)
