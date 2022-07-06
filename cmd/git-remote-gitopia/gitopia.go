@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	AppName                    = "gitopia"
+	AppName                    = "git-remote-gitopia"
 	AccountAddressPrefix       = "gitopia"
 	gitopiaConfigSection       = "gitopia"
 	gitopiaConfigKeyOption     = "key"
@@ -51,7 +51,7 @@ type Account struct {
 }
 
 type GitopiaWallet struct {
-	Name          string    `json:"name"` 
+	Name          string    `json:"name"`
 	Mnemonic      string    `json:"mnemonic"`
 	HDpath        string    `json:"HDpath"`
 	Password      string    `json:"password"`
@@ -114,7 +114,7 @@ func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend
 	}
 }
 
-func (k keyringBackend) address()(sdk.Address, error) {
+func (k keyringBackend) address() (sdk.Address, error) {
 	return k.cc.Address(k.key)
 }
 
@@ -292,7 +292,7 @@ func (h *GitopiaHandler) initGitopiaKey() (string, error) {
 	cc, err = cosmosclient.New(context.Background(),
 		cosmosclient.WithNodeAddress(config.TmAddr),
 		// same service name used in both helper and keys management app
-		cosmosclient.WithKeyringServiceName(AppName),                                // not suported on macos
+		cosmosclient.WithKeyringServiceName(AppName),                           // not suported on macos
 		cosmosclient.WithKeyringBackend(cosmosaccount.KeyringBackend(backend)), // not all backends supported by cosmos are supported by cosmos client
 		cosmosclient.WithAddressPrefix(AccountAddressPrefix),
 	)

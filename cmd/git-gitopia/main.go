@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	AppName              = "gitopia"
+	// !!NOTE!! keep this same as remote helper app name
+	AppName              = "git-remote-gitopia"
 	AccountAddressPrefix = "gitopia"
 )
 
