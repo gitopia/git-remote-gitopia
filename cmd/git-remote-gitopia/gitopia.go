@@ -157,7 +157,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	h.chainId = nodeInfoRes.DefaultNodeInfo.Network
 
 	// Get RepositoryId
-	res, err := h.queryClient.AddressRepository(context.Background(), &gitopiaTypes.QueryGetAddressRepositoryRequest{
+	res, err := h.queryClient.AnyRepository(context.Background(), &gitopiaTypes.QueryGetAnyRepositoryRequest{
 		Id:             h.remoteUserId,
 		RepositoryName: h.remoteRepositoryName,
 	})
