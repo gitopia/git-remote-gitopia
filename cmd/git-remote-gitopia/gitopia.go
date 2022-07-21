@@ -10,6 +10,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
+	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -17,23 +18,31 @@ import (
 	core "github.com/gitopia/git-remote-gitopia/core"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
+	"github.com/pkg/errors"
+	"github.com/tendermint/starport/starport/pkg/cosmosaccount"
+	"github.com/tendermint/starport/starport/pkg/cosmosclient"
+
 	"github.com/go-git/go-git/v5"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
-	AccountAddressPrefix = "gitopia"
-	saveToArweaveURL     = "http://35.200.147.237:5000/save"
-	branchPrefix         = "refs/heads/"
-	tagPrefix            = "refs/tags/"
+	AppName                    = "git-remote-gitopia"
+	AccountAddressPrefix       = "gitopia"
+	gitopiaConfigSection       = "gitopia"
+	gitopiaConfigKeyOption     = "key"
+	gitopiaConfigBackendOption = "backend"
+	saveToArweaveURL           = "http://35.200.147.237:5000/save"
+	branchPrefix               = "refs/heads/"
+	tagPrefix                  = "refs/tags/"
+	defaultFees                = "200utlore"
 )
 
 var (
-	AccountPubKeyPrefix = AccountAddressPrefix + "pub"
+	AccountPubKeyPrefix = AccountAddressPrefix + sdk.PrefixPublic
 )
 
 type Account struct {
@@ -51,11 +60,62 @@ type GitopiaWallet struct {
 	Accounts      []Account `json:"accounts"`
 }
 
+func (w *GitopiaWallet) walletAddress() (string, error) {
+	privKey, err := w.privKey()
+	if err != nil {
+		return "", err
+	}
+	walletAddress := sdk.AccAddress(privKey.PubKey().Address())
+
+	return walletAddress.String(), nil
+}
+
+func (w *GitopiaWallet) privKey() (cryptotypes.PrivKey, error) {
+	// Generate private key
+	hdPath := w.HDpath + strconv.Itoa(w.PathIncrement)
+	derivedPriv, err := hd.Secp256k1.Derive()(w.Mnemonic, "", hdPath)
+	if err != nil {
+		return nil, err
+	}
+
+	privKey := hd.Secp256k1.Generate()(derivedPriv)
+	return privKey, nil
+}
+
 type SaveToArweavePostBody struct {
 	RepositoryID     uint64 `json:"repository_id"`
 	RemoteRefName    string `json:"remote_ref_name"`
 	NewRemoteRefSha  string `json:"new_remote_ref_sha"`
 	PrevRemoteRefSha string `json:"prev_remote_ref_sha"`
+}
+
+type secretType int
+
+const (
+	UNKNOWN secretType = iota
+	ENV_VAR
+	LEDGER
+	KEYRING_BACKEND
+	GITHIB_SEC
+)
+
+type keyringBackend struct {
+	key     string
+	backend string
+	cc      cosmosclient.Client
+}
+
+func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend {
+	c.Factory = c.Factory.WithFees(defaultFees)
+	return keyringBackend{
+		key:     k,
+		backend: b,
+		cc:      c,
+	}
+}
+
+func (k keyringBackend) address() (sdk.Address, error) {
+	return k.cc.Address(k.key)
 }
 
 type GitopiaHandler struct {
@@ -68,6 +128,11 @@ type GitopiaHandler struct {
 	remoteRepository     gitopiaTypes.Repository
 
 	didPush bool
+
+	secType          secretType
+	gWallet          *GitopiaWallet            // ENV_VAR
+	kb               keyringBackend            // KEYRING_BACKEND
+	ledgerPrivateKey cryptotypes.LedgerPrivKey // LEDGER
 }
 
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
@@ -102,10 +167,11 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.remoteRepository = *res.Repository
 
-	sdkConfig := sdk.GetConfig()
-	sdkConfig.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
-	sdkConfig.Seal()
-
+	conf := sdk.GetConfig()
+	conf.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
+	// cannot seal the config
+	// cosmos client sets address prefix for each broadcasttx API call. probably a bug
+	// conf.Seal()
 	return nil
 }
 
@@ -164,73 +230,126 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 	return nil
 }
 
-func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) (*[]string, error) {
+func (h *GitopiaHandler) initGitopiaWallet() (string, error) {
 	var gitopiaWallet GitopiaWallet
-	var walletAddress sdk.AccAddress
-	var privKey cryptotypes.PrivKey
-	var ledgerPrivKey cryptotypes.LedgerPrivKey
 	var buffer []byte
 	var err error
 	h.didPush = true
-	var useLedger bool
 
 	// Read wallet
 	isGitHubAction := os.Getenv("GITHUB_ACTIONS")
 	if isGitHubAction == "true" {
 		// Read from GitHub secret
 		buffer = []byte(os.Getenv("GITOPIA_WALLET"))
-		err = json.Unmarshal(buffer, &gitopiaWallet)
-		if err != nil {
-			return nil, fmt.Errorf("fatal: error decoding wallet file")
-		}
-
-		// Generate private key
-		hdPath := gitopiaWallet.HDpath + strconv.Itoa(gitopiaWallet.PathIncrement)
-		derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", hdPath)
-		if err != nil {
-			return nil, err
-		}
-
-		privKey = hd.Secp256k1.Generate()(derivedPriv)
-		walletAddress = sdk.AccAddress(privKey.PubKey().Address())
+		h.secType = GITHIB_SEC
 	} else if len(os.Getenv("GITOPIA_WALLET")) != 0 {
 		gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
 		buffer, err = os.ReadFile(gitopiaWalletPath)
 		if err != nil {
-			return nil, fmt.Errorf("fatal: error reading gitopia wallet")
+			return "", fmt.Errorf("fatal: error reading gitopia wallet")
 		}
-
-		err = json.Unmarshal(buffer, &gitopiaWallet)
-		if err != nil {
-			return nil, fmt.Errorf("fatal: error decoding wallet file")
-		}
-
-		// Generate private key
-		hdPath := gitopiaWallet.HDpath + strconv.Itoa(gitopiaWallet.PathIncrement)
-		derivedPriv, err := hd.Secp256k1.Derive()(gitopiaWallet.Mnemonic, "", hdPath)
-		if err != nil {
-			return nil, err
-		}
-
-		privKey = hd.Secp256k1.Generate()(derivedPriv)
-		walletAddress = sdk.AccAddress(privKey.PubKey().Address())
+		h.secType = ENV_VAR
 	} else {
-		useLedger = true
-		ledgerPrivKey, err = ledger.NewPrivKeySecp256k1Unsafe(hd.BIP44Params{
-			Purpose:      44,
-			CoinType:     118,
-			Account:      0,
-			Change:       false,
-			AddressIndex: 0,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("fatal: Gitopia wallet is not configured! Set GITOPIA_WALLET environment variable or use Ledger")
-		}
-
-		walletAddress = sdk.AccAddress(ledgerPrivKey.PubKey().Address())
+		return "", fmt.Errorf("fatal: GITOPIA_WALLET environment variable is not set")
 	}
 
-	havePushPermission, err := h.havePushPermission(walletAddress.String())
+	err = json.Unmarshal(buffer, &gitopiaWallet)
+	if err != nil {
+		return "", fmt.Errorf("fatal: error decoding wallet file")
+	}
+
+	h.gWallet = &gitopiaWallet
+	walletAddress, err := h.gWallet.walletAddress()
+	if err != nil {
+		return "", err
+	}
+	return walletAddress, nil
+}
+
+func (h *GitopiaHandler) initGitopiaKey() (string, error) {
+	var key string
+	var backend string
+	var cc cosmosclient.Client
+	conf, err := goGitConfig.LoadConfig(goGitConfig.GlobalScope)
+	if err != nil {
+		return "", err
+	}
+	if conf.Raw.HasSection(gitopiaConfigSection) &&
+		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigKeyOption) {
+		key = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigKeyOption)
+	} else {
+		return "", errors.New("gitopia key not configured")
+	}
+
+	if conf.Raw.HasSection(gitopiaConfigSection) &&
+		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigBackendOption) {
+		backend = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigBackendOption)
+	} else {
+		backend = keyring.BackendOS // default to OS. same as cosmos keys subcommand
+	}
+
+	h.secType = KEYRING_BACKEND
+	cc, err = cosmosclient.New(context.Background(),
+		cosmosclient.WithNodeAddress(config.TmAddr),
+		// same service name used in both helper and keys management app
+		cosmosclient.WithKeyringServiceName(AppName),                           // not suported on macos
+		cosmosclient.WithKeyringBackend(cosmosaccount.KeyringBackend(backend)), // not all backends supported by cosmos are supported by cosmos client
+		cosmosclient.WithAddressPrefix(AccountAddressPrefix),
+	)
+	if err != nil {
+		return "", err
+	}
+	h.kb = newKeyringBackend(key, backend, cc)
+
+	wa, err := h.kb.address()
+	if err != nil {
+		return "", err
+	}
+	return wa.String(), nil
+}
+
+func (h *GitopiaHandler) initLedgerSecret() (string, error) {
+	ledgerPrivKey, err := ledger.NewPrivKeySecp256k1Unsafe(hd.BIP44Params{
+		Purpose:      44,
+		CoinType:     118,
+		Account:      0,
+		Change:       false,
+		AddressIndex: 0,
+	})
+	if err != nil {
+		return "", err
+	}
+	h.ledgerPrivateKey = ledgerPrivKey
+	h.secType = LEDGER
+	walletAddress := sdk.AccAddress(ledgerPrivKey.PubKey().Address())
+	return walletAddress.String(), nil
+}
+
+func (h *GitopiaHandler) initSecrets() (string, error) {
+	walletAddress := ""
+	var err error
+	if h.secType == UNKNOWN {
+		walletAddress, err = h.initGitopiaKey()
+		if err != nil {
+			walletAddress, err = h.initGitopiaWallet()
+			if err != nil {
+				walletAddress, err = h.initLedgerSecret()
+				if err != nil {
+					return "", fmt.Errorf("fatal: Gitopia wallet is not configured! Set gitopia key or use Ledger")
+				}
+			}
+		}
+	}
+	return walletAddress, nil
+}
+
+func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) (*[]string, error) {
+	walletAddress, err := h.initSecrets()
+	if err != nil {
+		return nil, err
+	}
+
+	havePushPermission, err := h.havePushPermission(walletAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -351,21 +470,36 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	var msg []sdk.Msg
 
 	if len(setBranches) > 0 {
-		msg = append(msg, gitopiaTypes.NewMsgMultiSetRepositoryBranch(walletAddress.String(), h.remoteRepository.Id, setBranches))
+		msg = append(msg, gitopiaTypes.NewMsgMultiSetRepositoryBranch(walletAddress, h.remoteRepository.Id, setBranches))
 	}
 	if len(setTags) > 0 {
-		msg = append(msg, gitopiaTypes.NewMsgMultiSetRepositoryTag(walletAddress.String(), h.remoteRepository.Id, setTags))
+		msg = append(msg, gitopiaTypes.NewMsgMultiSetRepositoryTag(walletAddress, h.remoteRepository.Id, setTags))
 	}
 	if len(deleteBranches) > 0 {
-		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteBranch(walletAddress.String(), h.remoteRepository.Id, deleteBranches))
+		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteBranch(walletAddress, h.remoteRepository.Id, deleteBranches))
 	}
 	if len(deleteTags) > 0 {
-		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteTag(walletAddress.String(), h.remoteRepository.Id, deleteTags))
+		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteTag(walletAddress, h.remoteRepository.Id, deleteTags))
 	}
 
-	err = signAndBroadcastTx(h.grpcConn, walletAddress.String(), h.chainId, privKey, ledgerPrivKey, msg, useLedger)
-	if err != nil {
-		return nil, err
+	if h.secType == KEYRING_BACKEND {
+		txResp, err := h.kb.cc.BroadcastTx(h.kb.key, msg...)
+		if err != nil {
+			return nil, err
+		}
+		if txResp.TxResponse.Code != 0 {
+			return nil, errors.WithMessage(err, "error broadcasting transaction")
+		}
+
+	} else {
+		privKey, err := h.gWallet.privKey()
+		if err != nil {
+			return nil, err
+		}
+		err = signAndBroadcastTx(h.grpcConn, walletAddress, h.chainId, privKey, h.ledgerPrivateKey, msg, h.secType == LEDGER)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	_ = prevRemoteRefSha

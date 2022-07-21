@@ -7,6 +7,8 @@ require (
 	github.com/gitopia/gitopia v0.13.0
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/pkg/errors v0.9.1
+	github.com/spf13/cobra v1.2.1
+	github.com/tendermint/starport v0.19.2
 	google.golang.org/grpc v1.45.0
 )
 
