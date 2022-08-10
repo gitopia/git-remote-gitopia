@@ -23,8 +23,14 @@ func Main(args []string, reader io.Reader, writer io.Writer, logger *log.Logger)
 
 	remoteName := args[2]
 	if strings.HasPrefix(remoteName, GITOPIA_PREFIX) {
-		remoteUserId = remoteName[len(GITOPIA_PREFIX) : len(GITOPIA_PREFIX)+46]
-		remoteRepositoryName = remoteName[len(GITOPIA_PREFIX)+47:]
+		s := strings.TrimPrefix(remoteName, GITOPIA_PREFIX)
+		sp := strings.Split(s, "/")
+
+		if len(sp) != 2 {
+			return fmt.Errorf("Invalid remote url")
+		}
+		remoteUserId = sp[0]
+		remoteRepositoryName = sp[1]
 	} else {
 		return fmt.Errorf("Invalid remote url")
 	}
