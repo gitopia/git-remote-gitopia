@@ -5,8 +5,10 @@ import (
 	"io"
 	"log"
 	"os"
+	"regexp"
 	"strings"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	core "github.com/gitopia/git-remote-gitopia/core"
 )
 
@@ -31,6 +33,25 @@ func Main(args []string, reader io.Reader, writer io.Writer, logger *log.Logger)
 		}
 		remoteUserId = sp[0]
 		remoteRepositoryName = sp[1]
+
+		if len(remoteUserId) == 46 { // gitopia address
+			_, err := sdk.AccAddressFromBech32(remoteUserId)
+			if err != nil {
+				return fmt.Errorf("Invalid remote url")
+			}
+		} else { // username
+			if len(remoteUserId) < 3 || len(remoteUserId) > 39 {
+				return fmt.Errorf("Invalid remote url")
+			}
+
+			valid, err := regexp.MatchString("^[a-zA-Z0-9]+(?:[-]?[a-zA-Z0-9])*$", remoteUserId)
+			if err != nil {
+				return fmt.Errorf("Invalid remote url")
+			}
+			if !valid {
+				return fmt.Errorf("Invalid remote url")
+			}
+		}
 	} else {
 		return fmt.Errorf("Invalid remote url")
 	}
