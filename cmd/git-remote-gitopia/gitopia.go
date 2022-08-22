@@ -13,10 +13,10 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/cosmos/cosmos-sdk/simapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
-	gitopiaapp "github.com/gitopia/gitopia/app"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
 	offchaintypes "github.com/gitopia/gitopia/x/offchain/types"
@@ -399,16 +399,27 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			force = true
 		}
 
-		config := gitopiaapp.MakeEncodingConfig()
+		encConf := simapp.MakeTestEncodingConfig()
+		offchaintypes.RegisterInterfaces(encConf.InterfaceRegistry)
+		offchaintypes.RegisterLegacyAminoCodec(encConf.Amino)
+
 		privKey, err := h.gWallet.privKey()
-		signer := offchaintypes.NewSigner(config.TxConfig, privKey)
+		signer := offchaintypes.NewSigner(encConf.TxConfig, privKey)
 		accAddress, err := sdk.AccAddressFromBech32(walletAddress)
 		data := []byte("test")
 		signData := offchaintypes.NewMsgSignData(accAddress, data)
-		tx, err := signer.Sign([]sdk.Msg{signData})
-		txBz, err := config.TxConfig.TxJSONEncoder()(tx)
 
-		auth := gogittransporthttp.TokenAuth{
+		tx, err := signer.Sign([]sdk.Msg{signData})
+		if err != nil {
+			return nil, fmt.Errorf("fatal: error signing tx")
+		}
+
+		txBz, err := encConf.TxConfig.TxJSONEncoder()(tx)
+		if err != nil {
+			return nil, fmt.Errorf("fatal: error encoding tx, %s", err.Error())
+		}
+
+		auth := &gogittransporthttp.TokenAuth{
 			Token: string(txBz),
 		}
 
@@ -417,7 +428,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", ref.Local, ref.Remote))},
 			Progress:   os.Stdout,
 			Force:      force,
-			Auth:       &auth,
+			Auth:       auth,
 		}
 
 		err = remote.Repo.Push(pushOptions)
