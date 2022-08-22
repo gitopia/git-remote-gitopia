@@ -19,6 +19,12 @@ const (
 func Main(args []string, reader io.Reader, writer io.Writer, logger *log.Logger) error {
 	var remoteUserId, remoteRepositoryName string
 
+	conf := sdk.GetConfig()
+	conf.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
+	// cannot seal the config
+	// cosmos client sets address prefix for each broadcasttx API call. probably a bug
+	// conf.Seal()
+
 	if len(args) < 3 {
 		return fmt.Errorf("Usage: git-remote-gitopia remote-name url")
 	}

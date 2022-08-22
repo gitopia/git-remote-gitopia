@@ -16,15 +16,17 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
+	gitopiaapp "github.com/gitopia/gitopia/app"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
-	"github.com/pkg/errors"
-	"github.com/tendermint/starport/starport/pkg/cosmosaccount"
-	"github.com/tendermint/starport/starport/pkg/cosmosclient"
-
+	offchaintypes "github.com/gitopia/gitopia/x/offchain/types"
 	"github.com/go-git/go-git/v5"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	gogittransporthttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/pkg/errors"
+	"github.com/tendermint/starport/starport/pkg/cosmosaccount"
+	"github.com/tendermint/starport/starport/pkg/cosmosclient"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -167,11 +169,6 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.remoteRepository = *res.Repository
 
-	conf := sdk.GetConfig()
-	conf.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
-	// cannot seal the config
-	// cosmos client sets address prefix for each broadcasttx API call. probably a bug
-	// conf.Seal()
 	return nil
 }
 
@@ -402,11 +399,25 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			force = true
 		}
 
+		config := gitopiaapp.MakeEncodingConfig()
+		privKey, err := h.gWallet.privKey()
+		signer := offchaintypes.NewSigner(config.TxConfig, privKey)
+		accAddress, err := sdk.AccAddressFromBech32(walletAddress)
+		data := []byte("test")
+		signData := offchaintypes.NewMsgSignData(accAddress, data)
+		tx, err := signer.Sign([]sdk.Msg{signData})
+		txBz, err := config.TxConfig.TxJSONEncoder()(tx)
+
+		auth := gogittransporthttp.TokenAuth{
+			Token: string(txBz),
+		}
+
 		pushOptions := &git.PushOptions{
 			RemoteName: "gitopia-objects-store",
 			RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", ref.Local, ref.Remote))},
 			Progress:   os.Stdout,
 			Force:      force,
+			Auth:       &auth,
 		}
 
 		err = remote.Repo.Push(pushOptions)
