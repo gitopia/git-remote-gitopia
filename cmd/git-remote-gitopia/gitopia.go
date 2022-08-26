@@ -34,6 +34,7 @@ import (
 const (
 	AppName                    = "git-remote-gitopia"
 	AccountAddressPrefix       = "gitopia"
+	AccountPubKeyPrefix        = AccountAddressPrefix + sdk.PrefixPublic
 	gitopiaConfigSection       = "gitopia"
 	gitopiaConfigKeyOption     = "key"
 	gitopiaConfigBackendOption = "backend"
@@ -41,10 +42,6 @@ const (
 	branchPrefix               = "refs/heads/"
 	tagPrefix                  = "refs/tags/"
 	defaultFees                = "200utlore"
-)
-
-var (
-	AccountPubKeyPrefix = AccountAddressPrefix + sdk.PrefixPublic
 )
 
 type Account struct {
@@ -403,7 +400,17 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		offchaintypes.RegisterInterfaces(encConf.InterfaceRegistry)
 		offchaintypes.RegisterLegacyAminoCodec(encConf.Amino)
 
-		privKey, err := h.gWallet.privKey()
+		var privKey offchaintypes.SignatureProvider
+
+		if h.secType == KEYRING_BACKEND {
+			// TODO
+			// k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin)
+		} else if h.secType == LEDGER {
+			privKey = h.ledgerPrivateKey
+		} else {
+			privKey, err = h.gWallet.privKey()
+		}
+
 		signer := offchaintypes.NewSigner(encConf.TxConfig, privKey)
 		accAddress, err := sdk.AccAddressFromBech32(walletAddress)
 		data := []byte("test")
