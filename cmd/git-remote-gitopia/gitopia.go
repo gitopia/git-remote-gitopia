@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
+	"github.com/cosmos/cosmos-sdk/codec/legacy"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	"github.com/cosmos/cosmos-sdk/simapp"
@@ -403,8 +406,31 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		var privKey offchaintypes.SignatureProvider
 
 		if h.secType == KEYRING_BACKEND {
-			// TODO
-			// k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin)
+			k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin)
+			info, err := k.Key(h.kb.key)
+			if err != nil {
+				return nil, err
+			}
+
+			var privKeyArmor string
+			val := reflect.ValueOf(&info).Elem().Elem()
+
+			for i := 0; i < val.NumField(); i++ {
+				if val.Type().Field(i).Name == "PrivKeyArmor" {
+					privKeyArmor = val.Field(i).String()
+					break
+				}
+			}
+
+			if privKeyArmor == "" {
+				err = fmt.Errorf("private key not available")
+				return nil, err
+			}
+
+			privKey, err = legacy.PrivKeyFromBytes([]byte(privKeyArmor))
+			if err != nil {
+				return nil, err
+			}
 		} else if h.secType == LEDGER {
 			privKey = h.ledgerPrivateKey
 		} else {
