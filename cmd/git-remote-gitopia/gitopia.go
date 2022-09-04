@@ -405,36 +405,43 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 
 		var privKey offchaintypes.SignatureProvider
 
-		if h.secType == KEYRING_BACKEND {
+		switch h.secType {
+		case KEYRING_BACKEND:
 			k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin)
 			info, err := k.Key(h.kb.key)
 			if err != nil {
 				return nil, err
 			}
 
-			var privKeyArmor string
-			val := reflect.ValueOf(&info).Elem().Elem()
+			if info.GetType() == sdkkeyring.TypeLocal {
+				var privKeyArmor string
+				val := reflect.ValueOf(&info).Elem().Elem()
 
-			for i := 0; i < val.NumField(); i++ {
-				if val.Type().Field(i).Name == "PrivKeyArmor" {
-					privKeyArmor = val.Field(i).String()
-					break
+				for i := 0; i < val.NumField(); i++ {
+					if val.Type().Field(i).Name == "PrivKeyArmor" {
+						privKeyArmor = val.Field(i).String()
+						break
+					}
 				}
-			}
 
-			if privKeyArmor == "" {
-				err = fmt.Errorf("private key not available")
-				return nil, err
-			}
+				if privKeyArmor == "" {
+					err = fmt.Errorf("private key not available")
+					return nil, err
+				}
 
-			privKey, err = legacy.PrivKeyFromBytes([]byte(privKeyArmor))
-			if err != nil {
-				return nil, err
+				privKey, err = legacy.PrivKeyFromBytes([]byte(privKeyArmor))
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, fmt.Errorf("fatal: unsupported keyring backend: %v", info.GetType())
 			}
-		} else if h.secType == LEDGER {
+		case LEDGER:
 			privKey = h.ledgerPrivateKey
-		} else {
+		case GITHIB_SEC, ENV_VAR:
 			privKey, err = h.gWallet.privKey()
+		default:
+			return nil, fmt.Errorf("fatal: unknown wallet type")
 		}
 
 		signer := offchaintypes.NewSigner(encConf.TxConfig, privKey)
