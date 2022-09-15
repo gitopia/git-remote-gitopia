@@ -4,27 +4,34 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
+	"github.com/cosmos/cosmos-sdk/codec/legacy"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
+	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
+	"github.com/cosmos/cosmos-sdk/simapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
-	"github.com/pkg/errors"
-	"github.com/tendermint/starport/starport/pkg/cosmosaccount"
-	"github.com/tendermint/starport/starport/pkg/cosmosclient"
-
+	offchaintypes "github.com/gitopia/gitopia/x/offchain/types"
 	"github.com/go-git/go-git/v5"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	gogittransporthttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/pkg/errors"
+	"github.com/tendermint/starport/starport/pkg/cosmosaccount"
+	"github.com/tendermint/starport/starport/pkg/cosmosclient"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -32,6 +39,7 @@ import (
 const (
 	AppName                    = "git-remote-gitopia"
 	AccountAddressPrefix       = "gitopia"
+	AccountPubKeyPrefix        = AccountAddressPrefix + sdk.PrefixPublic
 	gitopiaConfigSection       = "gitopia"
 	gitopiaConfigKeyOption     = "key"
 	gitopiaConfigBackendOption = "backend"
@@ -39,10 +47,6 @@ const (
 	branchPrefix               = "refs/heads/"
 	tagPrefix                  = "refs/tags/"
 	defaultFees                = "200utlore"
-)
-
-var (
-	AccountPubKeyPrefix = AccountAddressPrefix + sdk.PrefixPublic
 )
 
 type Account struct {
@@ -167,34 +171,37 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.remoteRepository = *res.Repository
 
-	conf := sdk.GetConfig()
-	conf.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
-	// cannot seal the config
-	// cosmos client sets address prefix for each broadcasttx API call. probably a bug
-	// conf.Seal()
 	return nil
 }
 
 func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, error) {
 	out := make([]string, 0)
 
-	branchAllRes, err := h.queryClient.BranchAll(context.Background(), &gitopiaTypes.QueryGetAllBranchRequest{
-		RepositoryId: h.remoteRepository.Id,
+	branchAllRes, err := h.queryClient.RepositoryBranchAll(context.Background(), &gitopiaTypes.QueryAllRepositoryBranchRequest{
+		Id:             h.remoteRepository.Owner.Id,
+		RepositoryName: h.remoteRepository.Name,
+		Pagination: &query.PageRequest{
+			Limit: math.MaxUint64,
+		},
 	})
 	if err != nil {
 		return out, err
 	}
-	for _, branch := range branchAllRes.Branches {
+	for _, branch := range branchAllRes.Branch {
 		out = append(out, fmt.Sprintf("%s %s%s", branch.Sha, branchPrefix, branch.Name))
 	}
 
-	tagAllRes, err := h.queryClient.TagAll(context.Background(), &gitopiaTypes.QueryGetAllTagRequest{
-		RepositoryId: h.remoteRepository.Id,
+	tagAllRes, err := h.queryClient.RepositoryTagAll(context.Background(), &gitopiaTypes.QueryAllRepositoryTagRequest{
+		Id:             h.remoteRepository.Owner.Id,
+		RepositoryName: h.remoteRepository.Name,
+		Pagination: &query.PageRequest{
+			Limit: math.MaxUint64,
+		},
 	})
 	if err != nil {
 		return out, err
 	}
-	for _, tag := range tagAllRes.Tags {
+	for _, tag := range tagAllRes.Tag {
 		out = append(out, fmt.Sprintf("%s %s%s", tag.Sha, tagPrefix, tag.Name))
 	}
 
@@ -370,8 +377,8 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	defer remote.Repo.DeleteRemote("gitopia-objects-store")
 
 	var newRemoteRefSha, prevRemoteRefSha string
-	var setBranches []*gitopiaTypes.MsgMultiSetRepositoryBranch_Branch
-	var setTags []*gitopiaTypes.MsgMultiSetRepositoryTag_Tag
+	var setBranches []gitopiaTypes.MsgMultiSetBranch_Branch
+	var setTags []gitopiaTypes.MsgMultiSetTag_Tag
 	var deleteBranches, deleteTags []string
 	var res []string
 
@@ -402,11 +409,76 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			force = true
 		}
 
+		encConf := simapp.MakeTestEncodingConfig()
+		offchaintypes.RegisterInterfaces(encConf.InterfaceRegistry)
+		offchaintypes.RegisterLegacyAminoCodec(encConf.Amino)
+
+		var privKey offchaintypes.SignatureProvider
+
+		switch h.secType {
+		case KEYRING_BACKEND:
+			k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin)
+			info, err := k.Key(h.kb.key)
+			if err != nil {
+				return nil, err
+			}
+
+			if info.GetType() == sdkkeyring.TypeLocal {
+				var privKeyArmor string
+				val := reflect.ValueOf(&info).Elem().Elem()
+
+				for i := 0; i < val.NumField(); i++ {
+					if val.Type().Field(i).Name == "PrivKeyArmor" {
+						privKeyArmor = val.Field(i).String()
+						break
+					}
+				}
+
+				if privKeyArmor == "" {
+					err = fmt.Errorf("private key not available")
+					return nil, err
+				}
+
+				privKey, err = legacy.PrivKeyFromBytes([]byte(privKeyArmor))
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				return nil, fmt.Errorf("fatal: unsupported keyring backend: %v", info.GetType())
+			}
+		case LEDGER:
+			privKey = h.ledgerPrivateKey
+		case GITHIB_SEC, ENV_VAR:
+			privKey, err = h.gWallet.privKey()
+		default:
+			return nil, fmt.Errorf("fatal: unknown wallet type")
+		}
+
+		signer := offchaintypes.NewSigner(encConf.TxConfig, privKey)
+		accAddress, err := sdk.AccAddressFromBech32(walletAddress)
+		data := []byte("test")
+		signData := offchaintypes.NewMsgSignData(accAddress, data)
+
+		tx, err := signer.Sign([]sdk.Msg{signData})
+		if err != nil {
+			return nil, fmt.Errorf("fatal: error signing tx")
+		}
+
+		txBz, err := encConf.TxConfig.TxJSONEncoder()(tx)
+		if err != nil {
+			return nil, fmt.Errorf("fatal: error encoding tx, %s", err.Error())
+		}
+
+		auth := &gogittransporthttp.TokenAuth{
+			Token: string(txBz),
+		}
+
 		pushOptions := &git.PushOptions{
 			RemoteName: "gitopia-objects-store",
 			RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", ref.Local, ref.Remote))},
 			Progress:   os.Stdout,
 			Force:      force,
+			Auth:       auth,
 		}
 
 		err = remote.Repo.Push(pushOptions)
@@ -423,20 +495,21 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			newRemoteRefSha = localCommitHash.String()
 
 			remoteBranchName := strings.TrimPrefix(ref.Remote, branchPrefix)
-			branchShaResponse, err := h.queryClient.BranchSha(context.Background(), &gitopiaTypes.QueryGetBranchShaRequest{
-				RepositoryId: h.remoteRepository.Id,
-				BranchName:   remoteBranchName,
+			branchShaResponse, err := h.queryClient.RepositoryBranchSha(context.Background(), &gitopiaTypes.QueryGetRepositoryBranchShaRequest{
+				Id:             h.remoteRepository.Owner.Id,
+				RepositoryName: h.remoteRepository.Name,
+				BranchName:     remoteBranchName,
 			})
 			if err == nil {
 				prevRemoteRefSha = branchShaResponse.Sha
 			}
 
-			branch := gitopiaTypes.MsgMultiSetRepositoryBranch_Branch{
-				Name:      remoteBranchName,
-				CommitSHA: newRemoteRefSha,
+			branch := gitopiaTypes.MsgMultiSetBranch_Branch{
+				Name: remoteBranchName,
+				Sha:  newRemoteRefSha,
 			}
 
-			setBranches = append(setBranches, &branch)
+			setBranches = append(setBranches, branch)
 			res = append(res, ref.Remote)
 		} else if strings.HasPrefix(ref.Local, tagPrefix) {
 			localTagName := strings.TrimPrefix(ref.Local, tagPrefix)
@@ -447,20 +520,21 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			newRemoteRefSha = tagRef.Hash().String()
 
 			remoteTagName := strings.TrimPrefix(ref.Remote, tagPrefix)
-			tagShaResponse, err := h.queryClient.TagSha(context.Background(), &gitopiaTypes.QueryGetTagShaRequest{
-				RepositoryId: h.remoteRepository.Id,
-				TagName:      remoteTagName,
+			tagShaResponse, err := h.queryClient.RepositoryTagSha(context.Background(), &gitopiaTypes.QueryGetRepositoryTagShaRequest{
+				Id:             h.remoteRepository.Owner.Id,
+				RepositoryName: h.remoteRepository.Name,
+				TagName:        remoteTagName,
 			})
 			if err == nil {
 				prevRemoteRefSha = tagShaResponse.Sha
 			}
 
-			tag := gitopiaTypes.MsgMultiSetRepositoryTag_Tag{
-				Name:      remoteTagName,
-				CommitSHA: newRemoteRefSha,
+			tag := gitopiaTypes.MsgMultiSetTag_Tag{
+				Name: remoteTagName,
+				Sha:  newRemoteRefSha,
 			}
 
-			setTags = append(setTags, &tag)
+			setTags = append(setTags, tag)
 			res = append(res, ref.Remote)
 		} else {
 			return nil, fmt.Errorf("fatal: not a valid branch/tag, %v", ref.Local)
@@ -470,16 +544,28 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	var msg []sdk.Msg
 
 	if len(setBranches) > 0 {
-		msg = append(msg, gitopiaTypes.NewMsgMultiSetRepositoryBranch(walletAddress, h.remoteRepository.Id, setBranches))
+		msg = append(msg, gitopiaTypes.NewMsgMultiSetBranch(walletAddress, gitopiaTypes.RepositoryId{
+			Id:   h.remoteRepository.Owner.Id,
+			Name: h.remoteRepository.Name,
+		}, setBranches))
 	}
 	if len(setTags) > 0 {
-		msg = append(msg, gitopiaTypes.NewMsgMultiSetRepositoryTag(walletAddress, h.remoteRepository.Id, setTags))
+		msg = append(msg, gitopiaTypes.NewMsgMultiSetTag(walletAddress, gitopiaTypes.RepositoryId{
+			Id:   h.remoteRepository.Owner.Id,
+			Name: h.remoteRepository.Name,
+		}, setTags))
 	}
 	if len(deleteBranches) > 0 {
-		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteBranch(walletAddress, h.remoteRepository.Id, deleteBranches))
+		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteBranch(walletAddress, gitopiaTypes.RepositoryId{
+			Id:   h.remoteRepository.Owner.Id,
+			Name: h.remoteRepository.Name,
+		}, deleteBranches))
 	}
 	if len(deleteTags) > 0 {
-		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteTag(walletAddress, h.remoteRepository.Id, deleteTags))
+		msg = append(msg, gitopiaTypes.NewMsgMultiDeleteTag(walletAddress, gitopiaTypes.RepositoryId{
+			Id:   h.remoteRepository.Owner.Id,
+			Name: h.remoteRepository.Name,
+		}, deleteTags))
 	}
 
 	if h.secType == KEYRING_BACKEND {
@@ -530,19 +616,31 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	return &res, nil
 }
 
-func (h *GitopiaHandler) havePushPermission(walletAddress string) (bool, error) {
-	var o gitopiaTypes.Organization
-
-	if h.remoteRepository.Owner.Type == gitopiaTypes.RepositoryOwner_ORGANIZATION {
-		res, err := h.queryClient.Organization(context.Background(), &gitopiaTypes.QueryGetOrganizationRequest{
-			Id: h.remoteRepository.Owner.Id,
+func (h *GitopiaHandler) havePushPermission(walletAddress string) (havePermission bool, err error) {
+	if h.remoteRepository.Owner.Type == gitopiaTypes.OwnerType_USER {
+		if walletAddress == h.remoteRepository.Owner.Id {
+			havePermission = true
+		}
+	} else if h.remoteRepository.Owner.Type == gitopiaTypes.OwnerType_DAO {
+		member, err := h.queryClient.DaoMember(context.Background(), &gitopiaTypes.QueryGetDaoMemberRequest{
+			DaoId:  h.remoteRepository.Owner.Id,
+			UserId: walletAddress,
 		})
 		if err != nil {
-			return false, errors.WithMessage(err, "fatal: organization doesn't exist")
+			return havePermission, err
 		}
-
-		o = *res.Organization
+		if member.Member.Role == gitopiaTypes.MemberRole_OWNER {
+			havePermission = true
+		}
 	}
 
-	return utils.HavePermission(h.remoteRepository, walletAddress, utils.PushBranchPermission, o), nil
+	if !havePermission {
+		if i, exists := utils.RepositoryCollaboratorExists(h.remoteRepository.Collaborators, walletAddress); exists {
+			if h.remoteRepository.Collaborators[i].Permission >= gitopiaTypes.PushBranchPermission {
+				havePermission = true
+			}
+		}
+	}
+
+	return havePermission, nil
 }
