@@ -11,7 +11,10 @@ import (
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
+	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/codec/legacy"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
@@ -29,9 +32,9 @@ import (
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	gogittransporthttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/ignite/cli/ignite/pkg/cosmosaccount"
+	"github.com/ignite/cli/ignite/pkg/cosmosclient"
 	"github.com/pkg/errors"
-	"github.com/tendermint/starport/starport/pkg/cosmosaccount"
-	"github.com/tendermint/starport/starport/pkg/cosmosclient"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -110,7 +113,7 @@ type keyringBackend struct {
 }
 
 func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend {
-	c.Factory = c.Factory.WithFees(defaultFees)
+	c.TxFactory = c.TxFactory.WithFees(defaultFees)
 	return keyringBackend{
 		key:     k,
 		backend: b,
@@ -118,8 +121,9 @@ func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend
 	}
 }
 
-func (k keyringBackend) address() (sdk.Address, error) {
-	return k.cc.Address(k.key)
+func (k keyringBackend) address() (string, error) {
+	address, err := k.cc.Address(k.key)
+	return address, err
 }
 
 type GitopiaHandler struct {
@@ -312,7 +316,7 @@ func (h *GitopiaHandler) initGitopiaKey() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return wa.String(), nil
+	return wa, nil
 }
 
 func (h *GitopiaHandler) initLedgerSecret() (string, error) {
@@ -417,7 +421,9 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 
 		switch h.secType {
 		case KEYRING_BACKEND:
-			k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin)
+			registry := codectypes.NewInterfaceRegistry()
+			cryptocodec.RegisterInterfaces(registry)
+			k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin, codec.NewProtoCodec(registry))
 			info, err := k.Key(h.kb.key)
 			if err != nil {
 				return nil, err
@@ -569,7 +575,11 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	}
 
 	if h.secType == KEYRING_BACKEND {
-		txResp, err := h.kb.cc.BroadcastTx(h.kb.key, msg...)
+		account, err := h.kb.cc.Account(h.kb.key)
+		if err != nil {
+			return nil, err
+		}
+		txResp, err := h.kb.cc.BroadcastTx(account, msg...)
 		if err != nil {
 			return nil, err
 		}
