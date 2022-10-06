@@ -6,12 +6,10 @@ import (
 	"os"
 
 	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/keys"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
-	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/version"
 	"github.com/spf13/cobra"
@@ -35,22 +33,15 @@ func main() {
 			conf.SetBech32PrefixForAccount(AccountAddressPrefix, AccountAddressPrefix+sdk.PrefixPublic)
 			conf.Seal()
 
+			version.Name = AppName
 			registry := codectypes.NewInterfaceRegistry()
 			cryptocodec.RegisterInterfaces(registry)
-			kb, err := cmd.Flags().GetString(flags.FlagKeyringBackend)
-			if err != nil {
-				return err
-			}
-			kd, err := cmd.Flags().GetString(flags.FlagKeyringDir)
-			if err != nil {
-				return err
-			}
-			k, err := sdkkeyring.New(AppName, kb, kd, os.Stdin, codec.NewProtoCodec(registry))
-			if err != nil {
-				return err
-			}
+			marshaler := codec.NewProtoCodec(registry)
 
-			initClientCtx := client.Context{}.WithInput(os.Stdin).WithKeyring(k)
+			initClientCtx := client.GetClientContextFromCmd(cmd).
+				WithCodec(marshaler).
+				WithInterfaceRegistry(registry).
+				WithInput(os.Stdin)
 
 			// sets global flags for keys subcommand
 			return client.SetCmdClientContextHandler(initClientCtx, cmd)
