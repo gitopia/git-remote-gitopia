@@ -148,6 +148,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.grpcConn, err = grpc.Dial(config.GRPCHost,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(nil).GRPCCodec())),
 	)
 	if err != nil {
 		return err
