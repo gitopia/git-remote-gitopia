@@ -23,6 +23,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/simapp"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/query"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
@@ -146,9 +147,13 @@ type GitopiaHandler struct {
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	var err error
 
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	authtypes.RegisterInterfaces(interfaceRegistry)
+	cryptocodec.RegisterInterfaces(interfaceRegistry)
+
 	h.grpcConn, err = grpc.Dial(config.GRPCHost,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(nil).GRPCCodec())),
+		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(interfaceRegistry).GRPCCodec())),
 	)
 	if err != nil {
 		return err
