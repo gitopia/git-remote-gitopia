@@ -6,13 +6,11 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/codec/legacy"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
@@ -50,7 +48,6 @@ const (
 	saveToArweaveURL           = "http://35.200.147.237:5000/save"
 	branchPrefix               = "refs/heads/"
 	tagPrefix                  = "refs/tags/"
-	defaultFees                = "200utlore"
 )
 
 type Account struct {
@@ -114,7 +111,7 @@ type keyringBackend struct {
 }
 
 func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend {
-	c.TxFactory = c.TxFactory.WithFees(defaultFees)
+	c.TxFactory = c.TxFactory.WithGasPrices(config.GasPrices)
 	return keyringBackend{
 		key:     k,
 		backend: b,
@@ -430,33 +427,27 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			registry := codectypes.NewInterfaceRegistry()
 			cryptocodec.RegisterInterfaces(registry)
 			k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin, codec.NewProtoCodec(registry))
-			info, err := k.Key(h.kb.key)
 			if err != nil {
 				return nil, err
 			}
-
-			if info.GetType() == sdkkeyring.TypeLocal {
-				var privKeyArmor string
-				val := reflect.ValueOf(&info).Elem().Elem()
-
-				for i := 0; i < val.NumField(); i++ {
-					if val.Type().Field(i).Name == "PrivKeyArmor" {
-						privKeyArmor = val.Field(i).String()
-						break
-					}
+			record, err := k.Key(h.kb.key)
+			if err != nil {
+				return nil, err
+			}
+			if record.GetType() == sdkkeyring.TypeLocal {
+				rl := record.GetLocal()
+				if rl.PrivKey == nil {
+					return nil, errors.New("private key is not available")
 				}
 
-				if privKeyArmor == "" {
-					err = fmt.Errorf("private key not available")
-					return nil, err
+				var ok bool
+				privKey, ok = rl.PrivKey.GetCachedValue().(cryptotypes.PrivKey)
+				if !ok {
+					return nil, errors.New("unable to cast any to cryptotypes.PrivKey")
 				}
 
-				privKey, err = legacy.PrivKeyFromBytes([]byte(privKeyArmor))
-				if err != nil {
-					return nil, err
-				}
 			} else {
-				return nil, fmt.Errorf("fatal: unsupported keyring backend: %v", info.GetType())
+				return nil, fmt.Errorf("fatal: unsupported keyring backend: %v", record.GetType())
 			}
 		case LEDGER:
 			privKey = h.ledgerPrivateKey
