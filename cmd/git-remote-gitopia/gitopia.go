@@ -18,12 +18,15 @@ import (
 	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
-	"github.com/cosmos/cosmos-sdk/simapp"
+	"github.com/cosmos/cosmos-sdk/std"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/query"
+	"github.com/cosmos/cosmos-sdk/types/tx/signing"
+	"github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
+	gitopia "github.com/gitopia/gitopia/app"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
 	offchaintypes "github.com/gitopia/gitopia/x/offchain/types"
@@ -416,7 +419,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			force = true
 		}
 
-		encConf := simapp.MakeTestEncodingConfig()
+		encConf := gitopia.MakeEncodingConfig()
 		offchaintypes.RegisterInterfaces(encConf.InterfaceRegistry)
 		offchaintypes.RegisterLegacyAminoCodec(encConf.Amino)
 
@@ -451,8 +454,21 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			}
 		case LEDGER:
 			privKey = h.ledgerPrivateKey
+
+			// Set legacy amino json as sign mode in case of ledger
+			interfaceRegistry := codectypes.NewInterfaceRegistry()
+			std.RegisterInterfaces(encConf.InterfaceRegistry)
+			gitopia.ModuleBasics.RegisterInterfaces(encConf.InterfaceRegistry)
+			offchaintypes.RegisterInterfaces(interfaceRegistry)
+			cryptocodec.RegisterInterfaces(interfaceRegistry)
+			codec := codec.NewProtoCodec(interfaceRegistry)
+			txCfg := tx.NewTxConfig(codec, []signing.SignMode{signing.SignMode_SIGN_MODE_LEGACY_AMINO_JSON})
+			encConf.TxConfig = txCfg
 		case GITHIB_SEC, ENV_VAR:
 			privKey, err = h.gWallet.privKey()
+			if err != nil {
+				return nil, fmt.Errorf("fatal: unable to generate private key from gitopia wallet")
+			}
 		default:
 			return nil, fmt.Errorf("fatal: unknown wallet type")
 		}
@@ -462,9 +478,13 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		data := []byte("test")
 		signData := offchaintypes.NewMsgSignData(accAddress, data)
 
+		if h.secType == LEDGER {
+			remote.Logger.Println("Please sign the git server request on your ledger device.")
+		}
+
 		tx, err := signer.Sign([]sdk.Msg{signData})
 		if err != nil {
-			return nil, fmt.Errorf("fatal: error signing tx")
+			return nil, fmt.Errorf("fatal: error signing tx, %s", err.Error())
 		}
 
 		txBz, err := encConf.TxConfig.TxJSONEncoder()(tx)
@@ -585,10 +605,19 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		}
 
 	} else {
-		privKey, err := h.gWallet.privKey()
-		if err != nil {
-			return nil, err
+		var privKey cryptotypes.PrivKey
+
+		if h.secType == GITHIB_SEC || h.secType == ENV_VAR {
+			privKey, err = h.gWallet.privKey()
+			if err != nil {
+				return nil, fmt.Errorf("fatal: unable to generate private key from gitopia wallet")
+			}
 		}
+
+		if h.secType == LEDGER {
+			remote.Logger.Println("Please sign the transaction on your ledger device.")
+		}
+
 		err = signAndBroadcastTx(h.grpcConn, walletAddress, h.chainId, privKey, h.ledgerPrivateKey, msg, h.secType == LEDGER)
 		if err != nil {
 			return nil, err
