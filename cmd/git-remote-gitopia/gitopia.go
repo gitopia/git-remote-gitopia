@@ -295,7 +295,7 @@ func (h *GitopiaHandler) initGitopiaKey() (string, error) {
 		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigKeyOption) {
 		key = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigKeyOption)
 	} else {
-		return "", errors.New("gitopia key not configured")
+		return "", ErrGitopiaKeyNotConfigured
 	}
 
 	if conf.Raw.HasSection(gitopiaConfigSection) &&
@@ -347,7 +347,7 @@ func (h *GitopiaHandler) initSecrets() (string, error) {
 	var err error
 	if h.secType == UNKNOWN {
 		walletAddress, err = h.initGitopiaKey()
-		if err != nil {
+		if errors.Is(err, ErrGitopiaKeyNotConfigured) {
 			walletAddress, err = h.initGitopiaWallet()
 			if err != nil {
 				walletAddress, err = h.initLedgerSecret()
@@ -355,6 +355,8 @@ func (h *GitopiaHandler) initSecrets() (string, error) {
 					return "", fmt.Errorf("fatal: Gitopia wallet is not configured! Set gitopia key or use Ledger")
 				}
 			}
+		} else {
+			return "", fmt.Errorf("fatal: Cannot access the gitopia key from the OS keyring, %s", err.Error())
 		}
 	}
 	return walletAddress, nil
