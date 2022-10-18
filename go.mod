@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/cosmos/cosmos-sdk v0.46.2
-	github.com/gitopia/gitopia v1.0.0-rc.4
+	github.com/gitopia/gitopia v1.0.0
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/ignite/cli v0.24.0
 	github.com/pkg/errors v0.9.1
