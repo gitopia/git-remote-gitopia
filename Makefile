@@ -90,6 +90,7 @@ build/$(appname)_$(version)_windows_amd64.zip:
 install: go.sum
 	@echo "--> Installing git-remote-gitopia"
 	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-remote-gitopia
+	@echo "--> Installing git-gitopia"
 	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-gitopia
 
 go.sum: go.mod

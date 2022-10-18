@@ -167,6 +167,7 @@ func signWithLedger(cc *grpc.ClientConn, sender string, chainId string, ledgerPr
 	txBuilder.SetGasLimit(gas)
 
 	signerData := xauthsigning.SignerData{
+		Address:       ledgerPrivKey.PubKey().String(),
 		ChainID:       chainId,
 		AccountNumber: acc.GetAccountNumber(),
 		Sequence:      acc.GetSequence(),

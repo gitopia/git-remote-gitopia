@@ -1,0 +1,10 @@
+# Change Log
+
+All notable changes will be documented here.
+
+## [v1.0.0] - 2022-10-18
+
+- Added `git gitopia keys` command to manage keys in OS keyring
+- API changes for gitopia v1.0.0 and cosmos-sdk v0.46.2
+- Support usernames and dao names in remote url
+- Send auth token in git push request

@@ -7,10 +7,12 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/keys"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/version"
 	"github.com/spf13/cobra"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 const (
@@ -22,7 +24,7 @@ const (
 func main() {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, client.ClientContextKey, new(client.Context))
-	version.Name = AppName // os keyring service name is same as version name 
+	version.Name = AppName // os keyring service name is same as version name
 	cmd := &cobra.Command{
 		Use:               "gitopia",
 		CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
@@ -30,7 +32,17 @@ func main() {
 			conf := sdk.GetConfig()
 			conf.SetBech32PrefixForAccount(AccountAddressPrefix, AccountAddressPrefix+sdk.PrefixPublic)
 			conf.Seal()
-			initClientCtx := client.Context{}.WithInput(os.Stdin)
+
+			version.Name = AppName
+			registry := codectypes.NewInterfaceRegistry()
+			cryptocodec.RegisterInterfaces(registry)
+			marshaler := codec.NewProtoCodec(registry)
+
+			initClientCtx := client.GetClientContextFromCmd(cmd).
+				WithCodec(marshaler).
+				WithInterfaceRegistry(registry).
+				WithInput(os.Stdin)
+
 			// sets global flags for keys subcommand
 			return client.SetCmdClientContextHandler(initClientCtx, cmd)
 		},

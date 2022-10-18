@@ -26,7 +26,7 @@ sudo mv /tmp/tmpinstalldir/git-remote-gitopia /usr/local/bin/
 
 ## Building
 
-Building `git-remote-gitopia` requires [Go 1.16+](https://golang.org/dl/).
+Building `git-remote-gitopia` requires [Go 1.18+](https://golang.org/dl/).
 
 ```
 make install
@@ -56,3 +56,7 @@ If you encounter the following error after installation, make sure to add `$GOBI
 ```sh
 git: 'remote-gitopia' is not a git command. See 'git --help'
 ```
+
+## Contributing
+
+Gitopia is an open source project and contributions from community are always welcome. Discussion and development of Gitopia majorly take place on the Gitopia via issues and proposals -- everyone is welcome to post bugs, feature requests, comments and pull requests to Gitopia. (read [Contribution Guidelines](CONTRIBUTING.md) and [Coding Guidelines](CodingGuidelines.md).

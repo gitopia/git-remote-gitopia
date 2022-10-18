@@ -6,22 +6,27 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"reflect"
 	"strconv"
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
-	"github.com/cosmos/cosmos-sdk/codec/legacy"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/crypto/ledger"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
-	"github.com/cosmos/cosmos-sdk/simapp"
+	"github.com/cosmos/cosmos-sdk/std"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/query"
+	"github.com/cosmos/cosmos-sdk/types/tx/signing"
+	"github.com/cosmos/cosmos-sdk/x/auth/tx"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
+	gitopia "github.com/gitopia/gitopia/app"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
 	offchaintypes "github.com/gitopia/gitopia/x/offchain/types"
@@ -29,9 +34,9 @@ import (
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	gogittransporthttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/ignite/cli/ignite/pkg/cosmosaccount"
+	"github.com/ignite/cli/ignite/pkg/cosmosclient"
 	"github.com/pkg/errors"
-	"github.com/tendermint/starport/starport/pkg/cosmosaccount"
-	"github.com/tendermint/starport/starport/pkg/cosmosclient"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -46,7 +51,6 @@ const (
 	saveToArweaveURL           = "http://35.200.147.237:5000/save"
 	branchPrefix               = "refs/heads/"
 	tagPrefix                  = "refs/tags/"
-	defaultFees                = "200utlore"
 )
 
 type Account struct {
@@ -110,7 +114,7 @@ type keyringBackend struct {
 }
 
 func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend {
-	c.Factory = c.Factory.WithFees(defaultFees)
+	c.TxFactory = c.TxFactory.WithGasPrices(config.GasPrices)
 	return keyringBackend{
 		key:     k,
 		backend: b,
@@ -118,8 +122,9 @@ func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend
 	}
 }
 
-func (k keyringBackend) address() (sdk.Address, error) {
-	return k.cc.Address(k.key)
+func (k keyringBackend) address() (string, error) {
+	address, err := k.cc.Address(k.key)
+	return address, err
 }
 
 type GitopiaHandler struct {
@@ -142,8 +147,13 @@ type GitopiaHandler struct {
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	var err error
 
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	authtypes.RegisterInterfaces(interfaceRegistry)
+	cryptocodec.RegisterInterfaces(interfaceRegistry)
+
 	h.grpcConn, err = grpc.Dial(config.GRPCHost,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(interfaceRegistry).GRPCCodec())),
 	)
 	if err != nil {
 		return err
@@ -285,7 +295,7 @@ func (h *GitopiaHandler) initGitopiaKey() (string, error) {
 		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigKeyOption) {
 		key = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigKeyOption)
 	} else {
-		return "", errors.New("gitopia key not configured")
+		return "", ErrGitopiaKeyNotConfigured
 	}
 
 	if conf.Raw.HasSection(gitopiaConfigSection) &&
@@ -312,7 +322,7 @@ func (h *GitopiaHandler) initGitopiaKey() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return wa.String(), nil
+	return wa, nil
 }
 
 func (h *GitopiaHandler) initLedgerSecret() (string, error) {
@@ -337,7 +347,7 @@ func (h *GitopiaHandler) initSecrets() (string, error) {
 	var err error
 	if h.secType == UNKNOWN {
 		walletAddress, err = h.initGitopiaKey()
-		if err != nil {
+		if errors.Is(err, ErrGitopiaKeyNotConfigured) {
 			walletAddress, err = h.initGitopiaWallet()
 			if err != nil {
 				walletAddress, err = h.initLedgerSecret()
@@ -345,6 +355,8 @@ func (h *GitopiaHandler) initSecrets() (string, error) {
 					return "", fmt.Errorf("fatal: Gitopia wallet is not configured! Set gitopia key or use Ledger")
 				}
 			}
+		} else if err != nil {
+			return "", fmt.Errorf("fatal: Cannot access the gitopia key from the OS keyring, %s", err.Error())
 		}
 	}
 	return walletAddress, nil
@@ -409,7 +421,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			force = true
 		}
 
-		encConf := simapp.MakeTestEncodingConfig()
+		encConf := gitopia.MakeEncodingConfig()
 		offchaintypes.RegisterInterfaces(encConf.InterfaceRegistry)
 		offchaintypes.RegisterLegacyAminoCodec(encConf.Amino)
 
@@ -417,39 +429,48 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 
 		switch h.secType {
 		case KEYRING_BACKEND:
-			k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin)
-			info, err := k.Key(h.kb.key)
+			registry := codectypes.NewInterfaceRegistry()
+			cryptocodec.RegisterInterfaces(registry)
+			k, err := sdkkeyring.New(AppName, h.kb.backend, "", os.Stdin, codec.NewProtoCodec(registry))
 			if err != nil {
 				return nil, err
 			}
-
-			if info.GetType() == sdkkeyring.TypeLocal {
-				var privKeyArmor string
-				val := reflect.ValueOf(&info).Elem().Elem()
-
-				for i := 0; i < val.NumField(); i++ {
-					if val.Type().Field(i).Name == "PrivKeyArmor" {
-						privKeyArmor = val.Field(i).String()
-						break
-					}
+			record, err := k.Key(h.kb.key)
+			if err != nil {
+				return nil, err
+			}
+			if record.GetType() == sdkkeyring.TypeLocal {
+				rl := record.GetLocal()
+				if rl.PrivKey == nil {
+					return nil, errors.New("private key is not available")
 				}
 
-				if privKeyArmor == "" {
-					err = fmt.Errorf("private key not available")
-					return nil, err
+				var ok bool
+				privKey, ok = rl.PrivKey.GetCachedValue().(cryptotypes.PrivKey)
+				if !ok {
+					return nil, errors.New("unable to cast any to cryptotypes.PrivKey")
 				}
 
-				privKey, err = legacy.PrivKeyFromBytes([]byte(privKeyArmor))
-				if err != nil {
-					return nil, err
-				}
 			} else {
-				return nil, fmt.Errorf("fatal: unsupported keyring backend: %v", info.GetType())
+				return nil, fmt.Errorf("fatal: unsupported keyring backend: %v", record.GetType())
 			}
 		case LEDGER:
 			privKey = h.ledgerPrivateKey
+
+			// Set legacy amino json as sign mode in case of ledger
+			interfaceRegistry := codectypes.NewInterfaceRegistry()
+			std.RegisterInterfaces(encConf.InterfaceRegistry)
+			gitopia.ModuleBasics.RegisterInterfaces(encConf.InterfaceRegistry)
+			offchaintypes.RegisterInterfaces(interfaceRegistry)
+			cryptocodec.RegisterInterfaces(interfaceRegistry)
+			codec := codec.NewProtoCodec(interfaceRegistry)
+			txCfg := tx.NewTxConfig(codec, []signing.SignMode{signing.SignMode_SIGN_MODE_LEGACY_AMINO_JSON})
+			encConf.TxConfig = txCfg
 		case GITHIB_SEC, ENV_VAR:
 			privKey, err = h.gWallet.privKey()
+			if err != nil {
+				return nil, fmt.Errorf("fatal: unable to generate private key from gitopia wallet")
+			}
 		default:
 			return nil, fmt.Errorf("fatal: unknown wallet type")
 		}
@@ -459,9 +480,13 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		data := []byte("test")
 		signData := offchaintypes.NewMsgSignData(accAddress, data)
 
+		if h.secType == LEDGER {
+			remote.Logger.Println("Please sign the git server request on your ledger device.")
+		}
+
 		tx, err := signer.Sign([]sdk.Msg{signData})
 		if err != nil {
-			return nil, fmt.Errorf("fatal: error signing tx")
+			return nil, fmt.Errorf("fatal: error signing tx, %s", err.Error())
 		}
 
 		txBz, err := encConf.TxConfig.TxJSONEncoder()(tx)
@@ -569,7 +594,11 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	}
 
 	if h.secType == KEYRING_BACKEND {
-		txResp, err := h.kb.cc.BroadcastTx(h.kb.key, msg...)
+		account, err := h.kb.cc.Account(h.kb.key)
+		if err != nil {
+			return nil, err
+		}
+		txResp, err := h.kb.cc.BroadcastTx(account, msg...)
 		if err != nil {
 			return nil, err
 		}
@@ -578,10 +607,19 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		}
 
 	} else {
-		privKey, err := h.gWallet.privKey()
-		if err != nil {
-			return nil, err
+		var privKey cryptotypes.PrivKey
+
+		if h.secType == GITHIB_SEC || h.secType == ENV_VAR {
+			privKey, err = h.gWallet.privKey()
+			if err != nil {
+				return nil, fmt.Errorf("fatal: unable to generate private key from gitopia wallet")
+			}
 		}
+
+		if h.secType == LEDGER {
+			remote.Logger.Println("Please sign the transaction on your ledger device.")
+		}
+
 		err = signAndBroadcastTx(h.grpcConn, walletAddress, h.chainId, privKey, h.ledgerPrivateKey, msg, h.secType == LEDGER)
 		if err != nil {
 			return nil, err
