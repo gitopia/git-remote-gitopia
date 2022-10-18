@@ -355,7 +355,7 @@ func (h *GitopiaHandler) initSecrets() (string, error) {
 					return "", fmt.Errorf("fatal: Gitopia wallet is not configured! Set gitopia key or use Ledger")
 				}
 			}
-		} else {
+		} else if err != nil {
 			return "", fmt.Errorf("fatal: Cannot access the gitopia key from the OS keyring, %s", err.Error())
 		}
 	}
