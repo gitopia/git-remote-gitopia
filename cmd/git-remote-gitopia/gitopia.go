@@ -104,7 +104,7 @@ const (
 	ENV_VAR
 	LEDGER
 	KEYRING_BACKEND
-	GITHIB_SEC
+	GITHUB_SEC
 )
 
 type keyringBackend struct {
@@ -258,7 +258,7 @@ func (h *GitopiaHandler) initGitopiaWallet() (string, error) {
 	if isGitHubAction == "true" {
 		// Read from GitHub secret
 		buffer = []byte(os.Getenv("GITOPIA_WALLET"))
-		h.secType = GITHIB_SEC
+		h.secType = GITHUB_SEC
 	} else if len(os.Getenv("GITOPIA_WALLET")) != 0 {
 		gitopiaWalletPath := os.Getenv("GITOPIA_WALLET")
 		buffer, err = os.ReadFile(gitopiaWalletPath)
@@ -368,6 +368,19 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, err
 	}
 
+	switch h.secType {
+	case ENV_VAR:
+		remote.Logger.Printf("Loaded Gitopia wallet file, path: %s, address: %s\n", os.Getenv("GITOPIA_WALLET"), walletAddress)
+	case GITHUB_SEC:
+		remote.Logger.Printf("Loaded Gitopia wallet from GitHub secret, wallet address: %s\n", walletAddress)
+	case LEDGER:
+		remote.Logger.Printf("Using Ledger device, wallet address: %s\n", walletAddress)
+	case KEYRING_BACKEND:
+		remote.Logger.Printf("Using OS keyring, key name: %s, wallet address: %s\n", h.kb.key, walletAddress)
+	default:
+		return nil, errors.New("fatal: Unsupported wallet type")
+	}
+
 	havePushPermission, err := h.havePushPermission(walletAddress)
 	if err != nil {
 		return nil, err
@@ -466,7 +479,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			codec := codec.NewProtoCodec(interfaceRegistry)
 			txCfg := tx.NewTxConfig(codec, []signing.SignMode{signing.SignMode_SIGN_MODE_LEGACY_AMINO_JSON})
 			encConf.TxConfig = txCfg
-		case GITHIB_SEC, ENV_VAR:
+		case GITHUB_SEC, ENV_VAR:
 			privKey, err = h.gWallet.privKey()
 			if err != nil {
 				return nil, fmt.Errorf("fatal: unable to generate private key from gitopia wallet")
@@ -609,7 +622,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	} else {
 		var privKey cryptotypes.PrivKey
 
-		if h.secType == GITHIB_SEC || h.secType == ENV_VAR {
+		if h.secType == GITHUB_SEC || h.secType == ENV_VAR {
 			privKey, err = h.gWallet.privKey()
 			if err != nil {
 				return nil, fmt.Errorf("fatal: unable to generate private key from gitopia wallet")

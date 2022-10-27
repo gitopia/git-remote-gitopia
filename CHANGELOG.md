@@ -2,6 +2,12 @@
 
 All notable changes will be documented here.
 
+## [v1.1.0] - 2022-10-27
+
+- Bump gitopia version to v1.1.0
+- Support for Ledger Nano S plus
+- Log wallet type and address
+
 ## [v1.0.0] - 2022-10-18
 
 - Added `git gitopia keys` command to manage keys in OS keyring
