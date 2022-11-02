@@ -1,4 +1,4 @@
-GITOPIA_ENV ?= prod
+GITOPIA_ENV ?= testing
 LEDGER_ENABLED ?= true
 
 build_tags = netgo
@@ -30,7 +30,7 @@ build_tags := $(strip $(build_tags))
 BUILD_FLAGS := -tags "$(build_tags) $(GITOPIA_ENV)"
 
 appname := git-remote-gitopia
-version := 0.4.2
+version := 1.2.0
 
 build = GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/$(appname)$(3) ./cmd/git-remote-gitopia && \
     GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/git-gitopia$(3) ./cmd/git-gitopia
@@ -41,7 +41,7 @@ zip = cd build && zip $(appname)_$(version)_$(1)_$(2).zip $(appname)$(3) git-git
 
 .PHONY: build
 
-all: windows darwin linux
+all: windows darwin linux git_release_tar_gz git_release_zip
 
 clean:
 	rm -rf build/
@@ -86,6 +86,13 @@ build/$(appname)_$(version)_windows_386.zip:
 build/$(appname)_$(version)_windows_amd64.zip:
 	$(call build,windows,amd64,.exe)
 	$(call zip,windows,amd64,.exe)
+
+git_release_tar_gz:
+	git archive --format=tar --prefix=$(appname)-$(version)/ v$(version) \
+		| gzip > build/$(appname)-$(version).tar.gz
+
+git_release_zip:
+	git archive --format zip --output build/$(appname)-$(version).zip v$(version)
 
 install: go.sum
 	@echo "--> Installing git-remote-gitopia"
