@@ -2,6 +2,10 @@
 
 All notable changes will be documented here.
 
+## [v1.2.0] - 2022-11-02
+
+- Bump gitopia version to v1.1.2
+
 ## [v1.1.0] - 2022-10-27
 
 - Bump gitopia version to v1.1.0
