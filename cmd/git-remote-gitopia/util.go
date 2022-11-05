@@ -81,13 +81,11 @@ func signWithWallet(cc *grpc.ClientConn, sender string, chainId string, privKey 
 	}
 	txBuilder.SetGasLimit(gas)
 
-	gasPrice, err := sdk.ParseDecCoin(config.GasPrices)
+	fee, err := calculateFee(gas)
 	if err != nil {
 		return nil, err
 	}
-	fee := float64(gas) * float64(gasPrice.Amount.MustFloat64())
-	fee = math.Ceil(fee)
-	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin(gasPrice.Denom, sdk.NewInt(int64(fee)))))
+	txBuilder.SetFeeAmount(fee)
 
 	signerData := xauthsigning.SignerData{
 		ChainID:       chainId,
@@ -173,13 +171,11 @@ func signWithLedger(cc *grpc.ClientConn, sender string, chainId string, ledgerPr
 	}
 	txBuilder.SetGasLimit(gas)
 
-	gasPrice, err := sdk.ParseDecCoin(config.GasPrices)
+	fee, err := calculateFee(gas)
 	if err != nil {
 		return nil, err
 	}
-	fee := float64(gas) * float64(gasPrice.Amount.MustFloat64())
-	fee = math.Ceil(fee)
-	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin(gasPrice.Denom, sdk.NewInt(int64(fee)))))
+	txBuilder.SetFeeAmount(fee)
 
 	signerData := xauthsigning.SignerData{
 		Address:       ledgerPrivKey.PubKey().String(),
@@ -281,4 +277,15 @@ func calculateGas(cc *grpc.ClientConn, txClient tx.ServiceClient, txCfg client.T
 	gas := uint64(GAS_ADJUSTMENT * float64(simRes.GasInfo.GasUsed))
 
 	return gas, nil
+}
+
+func calculateFee(gas uint64) (sdk.Coins, error) {
+	gasPrice, err := sdk.ParseDecCoin(config.GasPrices)
+	if err != nil {
+		return nil, err
+	}
+	fee := float64(gas) * float64(gasPrice.Amount.MustFloat64())
+	fee = math.Ceil(fee)
+
+	return sdk.NewCoins(sdk.NewCoin(gasPrice.Denom, sdk.NewInt(int64(fee)))), nil
 }
