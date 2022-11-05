@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -18,12 +19,12 @@ import (
 	xauthsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtype "github.com/cosmos/cosmos-sdk/x/auth/types"
-
+	"github.com/gitopia/git-remote-gitopia/config"
 	"google.golang.org/grpc"
 )
 
 const (
-	GAS_ADJUSTMENT = 1.2
+	GAS_ADJUSTMENT = 1.5
 )
 
 func signWithWallet(cc *grpc.ClientConn, sender string, chainId string, privKey cryptotypes.PrivKey, msg []sdk.Msg, txClient tx.ServiceClient) ([]byte, error) {
@@ -46,7 +47,6 @@ func signWithWallet(cc *grpc.ClientConn, sender string, chainId string, privKey 
 	if err != nil {
 		return nil, err
 	}
-	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin("utlore", sdk.NewInt(500))))
 
 	res, err := accountQueryClient.Account(context.Background(),
 		&authtype.QueryAccountRequest{
@@ -80,6 +80,14 @@ func signWithWallet(cc *grpc.ClientConn, sender string, chainId string, privKey 
 		return nil, err
 	}
 	txBuilder.SetGasLimit(gas)
+
+	gasPrice, err := sdk.ParseDecCoin(config.GasPrices)
+	if err != nil {
+		return nil, err
+	}
+	fee := float64(gas) * float64(gasPrice.Amount.MustFloat64())
+	fee = math.Ceil(fee)
+	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin(gasPrice.Denom, sdk.NewInt(int64(fee)))))
 
 	signerData := xauthsigning.SignerData{
 		ChainID:       chainId,
@@ -131,7 +139,6 @@ func signWithLedger(cc *grpc.ClientConn, sender string, chainId string, ledgerPr
 	if err != nil {
 		return nil, err
 	}
-	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin("utlore", sdk.NewInt(500))))
 
 	res, err := accountQueryClient.Account(context.Background(),
 		&authtype.QueryAccountRequest{
@@ -165,6 +172,14 @@ func signWithLedger(cc *grpc.ClientConn, sender string, chainId string, ledgerPr
 		return nil, err
 	}
 	txBuilder.SetGasLimit(gas)
+
+	gasPrice, err := sdk.ParseDecCoin(config.GasPrices)
+	if err != nil {
+		return nil, err
+	}
+	fee := float64(gas) * float64(gasPrice.Amount.MustFloat64())
+	fee = math.Ceil(fee)
+	txBuilder.SetFeeAmount(sdk.NewCoins(sdk.NewCoin(gasPrice.Denom, sdk.NewInt(int64(fee)))))
 
 	signerData := xauthsigning.SignerData{
 		Address:       ledgerPrivKey.PubKey().String(),
