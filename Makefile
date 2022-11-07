@@ -30,7 +30,7 @@ build_tags := $(strip $(build_tags))
 BUILD_FLAGS := -tags "$(build_tags) $(GITOPIA_ENV)"
 
 appname := git-remote-gitopia
-version := 1.2.0
+version := 1.3.0
 
 build = GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/$(appname)$(3) ./cmd/git-remote-gitopia && \
     GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/git-gitopia$(3) ./cmd/git-gitopia
