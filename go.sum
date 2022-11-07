@@ -238,8 +238,8 @@ github.com/fsnotify/fsnotify v1.5.4 h1:jRbGcIw6P2Meqdwuo0H1p6JVLbL5DHKAKlYndzMwV
 github.com/fsnotify/fsnotify v1.5.4/go.mod h1:OVB6XrOHzAwXMpEM7uPOzcehqUV2UqJxmVXmkdnm1bU=
 github.com/ghodss/yaml v1.0.0 h1:wQHKEahhL6wmXdzwWG11gIVCkOv05bNOh+Rxn0yngAk=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
-github.com/gitopia/gitopia v1.1.2 h1:jojUdCCIZo+rNSmCCI+HZ6ps/ducFI1qzDPKJgbFNyk=
-github.com/gitopia/gitopia v1.1.2/go.mod h1:sWZQi8BlU4kGu1EyepNmH+iVDKUAdGo5qPIXv36o3So=
+github.com/gitopia/gitopia v1.1.3 h1:eR+3VUOS+xPbQWQwXeW3MrxAFbfKvKGakXWQ1F6dGfg=
+github.com/gitopia/gitopia v1.1.3/go.mod h1:sWZQi8BlU4kGu1EyepNmH+iVDKUAdGo5qPIXv36o3So=
 github.com/gliderlabs/ssh v0.2.2 h1:6zsha5zo/TWhRhwqCD3+EarCAgZ2yN28ipRnGPnwkI0=
 github.com/gliderlabs/ssh v0.2.2/go.mod h1:U7qILu1NlMHj9FlMhZLlkCdDnU1DBEAqr0aevW3Awn0=
 github.com/go-git/gcfg v1.5.0 h1:Q5ViNfGF8zFgyJWPqYwA7qGFoMTEiBmdlkcfRmpIMa4=
