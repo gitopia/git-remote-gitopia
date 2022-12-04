@@ -2,6 +2,10 @@
 
 All notable changes will be documented here.
 
+## [v1.3.2] - UNRELEASED
+
+- Allow invocation without `GIT_DIR` variable
+
 ## [v1.3.1] - 2022-11-15
 
 - Fix node address in prod config
