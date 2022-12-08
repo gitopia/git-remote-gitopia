@@ -2,6 +2,10 @@
 
 All notable changes will be documented here.
 
+## [v1.4.0] - 
+
+- Bump gitopia version to v1.3.0
+
 ## [v1.3.1] - 2022-11-15
 
 - Fix node address in prod config
