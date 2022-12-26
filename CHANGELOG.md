@@ -2,7 +2,7 @@
 
 All notable changes will be documented here.
 
-## [v1.3.2] - UNRELEASED
+## [v1.3.2] - 2022-12-26
 
 - Allow invocation without `GIT_DIR` variable
 
