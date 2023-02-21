@@ -8,6 +8,7 @@ require (
 	github.com/go-git/go-git/v5 v5.5.1
 	github.com/ignite/cli v0.24.0
 	github.com/pkg/errors v0.9.1
+	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/cobra v1.6.1
 	google.golang.org/grpc v1.51.0
 )
