@@ -2,9 +2,9 @@
 
 All notable changes will be documented here.
 
-## [v1.4.0] - 
+## [v1.4.0] - 2023-02-22
 
-- Bump gitopia version to v1.3.0
+- Upgrade gitopia version to v1.3.0
 
 ## [v1.3.1] - 2022-11-15
 
