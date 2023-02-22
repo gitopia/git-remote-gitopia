@@ -2,6 +2,10 @@
 
 All notable changes will be documented here.
 
+## [v1.4.0] - 2023-02-22
+
+- Upgrade gitopia version to v1.3.0
+
 ## [v1.3.2] - 2022-12-26
 
 - Allow invocation without `GIT_DIR` variable
