@@ -6,6 +6,10 @@ All notable changes will be documented here.
 
 - Upgrade gitopia version to v1.3.0
 
+## [v1.3.2] - 2022-12-26
+
+- Allow invocation without `GIT_DIR` variable
+
 ## [v1.3.1] - 2022-11-15
 
 - Fix node address in prod config
