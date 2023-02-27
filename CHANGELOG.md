@@ -6,6 +6,7 @@ All notable changes will be documented here.
 
 - git credential helper for git lfs
 - Use git cli instead of go-git for fetch/push
+- Common http basic auth for both git push and lfs
 - Refactor wallets
 
 ## [v1.4.0] - 2023-02-22

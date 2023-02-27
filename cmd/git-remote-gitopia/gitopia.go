@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -122,6 +123,27 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 
 	out = append(out, fmt.Sprintf("@refs/heads/%s HEAD", h.remoteRepository.DefaultBranch))
 
+	if _, err := os.Stat(".lfsconfig"); errors.Is(err, os.ErrNotExist) {
+		lfsURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
+
+		args := []string{
+			"config",
+			"--file=.lfsconfig",
+			"lfs.url",
+			lfsURL,
+		}
+
+		cmd, pipe := core.GitCommand("git", args...)
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
+		defer core.CleanUpProcessGroup(cmd)
+
+		if _, err := io.Copy(ioutil.Discard, pipe); err != nil {
+			return nil, err
+		}
+	}
+
 	return out, nil
 }
 
@@ -232,9 +254,14 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			remote.Logger.Println("Please sign the git server request on your ledger device.")
 		}
 
+		credential := fmt.Sprintf("%s:%s", h.wallet.Address(), signature)
 		args := []string{
 			"-c",
-			fmt.Sprintf("http.extraheader=Authorization: Bearer %s", signature),
+			fmt.Sprintf("http.extraheader=Authorization: Basic %s", base64.StdEncoding.EncodeToString([]byte(credential))),
+			"-c",
+			"credential.helper=",
+			"-c",
+			"credential.helper=gitopia",
 			"push",
 			remoteURL,
 			fmt.Sprintf("%s:%s", ref.Local, ref.Remote),
