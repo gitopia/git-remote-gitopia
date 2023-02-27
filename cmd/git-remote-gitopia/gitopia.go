@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/ioutil"
 	"math"
 	"os"
 	"strings"
@@ -19,10 +21,7 @@ import (
 	"github.com/gitopia/git-remote-gitopia/core/wallet"
 	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
 	"github.com/gitopia/gitopia/x/gitopia/utils"
-	"github.com/go-git/go-git/v5"
-	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	gogittransporthttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -128,26 +127,29 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 
 func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
-	remoteConfig := &goGitConfig.RemoteConfig{
-		Name: "gitopia-objects-store",
-		URLs: []string{remoteURL},
+
+	force := false
+	if strings.HasPrefix(ref, "+") {
+		ref = strings.TrimPrefix(ref, "+")
+		force = true
 	}
 
-	_, err := remote.Repo.CreateRemote(remoteConfig)
-	if err != nil {
+	args := []string{
+		"fetch",
+		remoteURL,
+		ref,
+	}
+	if force {
+		args = append(args, "--force")
+	}
+	cmd, pipe := core.GitCommand("git", args...)
+	if err := cmd.Start(); err != nil {
 		return err
 	}
-	defer remote.Repo.DeleteRemote("gitopia-objects-store")
+	defer core.CleanUpProcessGroup(cmd)
 
-	fetchOptions := &git.FetchOptions{
-		RemoteName: "gitopia-objects-store",
-		Progress:   os.Stdout,
-		Tags:       git.TagMode(3),
-	}
-
-	err = remote.Repo.Fetch(fetchOptions)
-	if err != nil && err != git.NoErrAlreadyUpToDate {
-		return fmt.Errorf("fatal: %v", err.Error())
+	if _, err := io.Copy(ioutil.Discard, pipe); err != nil {
+		return err
 	}
 
 	return nil
@@ -186,16 +188,6 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	}
 
 	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
-	remoteConfig := &goGitConfig.RemoteConfig{
-		Name: "gitopia-objects-store",
-		URLs: []string{remoteURL},
-	}
-
-	_, err = remote.Repo.CreateRemote(remoteConfig)
-	if err != nil {
-		return nil, err
-	}
-	defer remote.Repo.DeleteRemote("gitopia-objects-store")
 
 	var newRemoteRefSha string
 	var setBranches []gitopiaTypes.MsgMultiSetBranch_Branch
@@ -240,22 +232,25 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			remote.Logger.Println("Please sign the git server request on your ledger device.")
 		}
 
-		auth := &gogittransporthttp.TokenAuth{
-			Token: string(signature),
+		args := []string{
+			"-c",
+			fmt.Sprintf("http.extraheader=Authorization: Bearer %s", signature),
+			"push",
+			remoteURL,
+			fmt.Sprintf("%s:%s", ref.Local, ref.Remote),
 		}
+		if force {
+			args = append(args, "--force")
+		}
+		cmd, _ := core.GitCommand("git", args...)
+		if err := cmd.Start(); err != nil {
+			return nil, err
+		}
+		defer core.CleanUpProcessGroup(cmd)
 
-		pushOptions := &git.PushOptions{
-			RemoteName: "gitopia-objects-store",
-			RefSpecs:   []goGitConfig.RefSpec{goGitConfig.RefSpec(fmt.Sprintf("%s:%s", ref.Local, ref.Remote))},
-			Progress:   os.Stdout,
-			Force:      force,
-			Auth:       auth,
-		}
-
-		err = remote.Repo.Push(pushOptions)
-		if err != nil && err != git.NoErrAlreadyUpToDate {
-			return nil, fmt.Errorf("fatal: error pushing the git objects, %v", err.Error())
-		}
+		// if _, err := io.Copy(os.Stderr, pipe); err != nil {
+		// 	return nil, err
+		// }
 
 		// Update ref on gitopia
 		if strings.HasPrefix(ref.Local, branchPrefix) {

@@ -5,7 +5,8 @@ All notable changes will be documented here.
 ## [v1.5.0] - UNRELEASED
 
 - git credential helper for git lfs
-- refactor wallets
+- Use git cli instead of go-git for fetch/push
+- Refactor wallets
 
 ## [v1.4.0] - 2023-02-22
 
