@@ -242,15 +242,15 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		if force {
 			args = append(args, "--force")
 		}
-		cmd, _ := core.GitCommand("git", args...)
+		cmd, pipe := core.GitCommand("git", args...)
 		if err := cmd.Start(); err != nil {
 			return nil, err
 		}
 		defer core.CleanUpProcessGroup(cmd)
 
-		// if _, err := io.Copy(os.Stderr, pipe); err != nil {
-		// 	return nil, err
-		// }
+		if _, err := io.Copy(ioutil.Discard, pipe); err != nil {
+			return nil, err
+		}
 
 		// Update ref on gitopia
 		if strings.HasPrefix(ref.Local, branchPrefix) {
