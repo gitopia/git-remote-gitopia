@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"math"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
@@ -123,25 +122,27 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 
 	out = append(out, fmt.Sprintf("@refs/heads/%s HEAD", h.remoteRepository.DefaultBranch))
 
-	if _, err := os.Stat(".lfsconfig"); errors.Is(err, os.ErrNotExist) {
+	dir := os.Getenv("GIT_DIR")
+	if strings.HasSuffix(dir, "/.git") {
+		dir = strings.TrimSuffix(dir, "/.git")
+	}
+
+	lfsConfigPath := path.Join(dir, ".lfsconfig")
+	if _, err := os.Stat(lfsConfigPath); os.IsNotExist(err) {
 		lfsURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
 
 		args := []string{
 			"config",
-			"--file=.lfsconfig",
+			fmt.Sprintf("--file=%s", lfsConfigPath),
 			"lfs.url",
 			lfsURL,
 		}
 
-		cmd, pipe := core.GitCommand("git", args...)
-		if err := cmd.Start(); err != nil {
-			return nil, err
+		cmd, _ := core.GitCommand("git", args...)
+		if err := cmd.Run(); err != nil {
+			return nil, errors.Wrap(err, "error creating .lfsconfig")
 		}
 		defer core.CleanUpProcessGroup(cmd)
-
-		if _, err := io.Copy(ioutil.Discard, pipe); err != nil {
-			return nil, err
-		}
 	}
 
 	return out, nil
@@ -164,15 +165,11 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 	if force {
 		args = append(args, "--force")
 	}
-	cmd, pipe := core.GitCommand("git", args...)
-	if err := cmd.Start(); err != nil {
-		return err
+	cmd, _ := core.GitCommand("git", args...)
+	if err := cmd.Run(); err != nil {
+		return errors.Wrap(err, "error fetching from remote repository")
 	}
 	defer core.CleanUpProcessGroup(cmd)
-
-	if _, err := io.Copy(ioutil.Discard, pipe); err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -269,15 +266,11 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		if force {
 			args = append(args, "--force")
 		}
-		cmd, pipe := core.GitCommand("git", args...)
-		if err := cmd.Start(); err != nil {
-			return nil, err
+		cmd, _ := core.GitCommand("git", args...)
+		if err := cmd.Run(); err != nil {
+			return nil, errors.Wrap(err, "error pushing to remote repository")
 		}
 		defer core.CleanUpProcessGroup(cmd)
-
-		if _, err := io.Copy(ioutil.Discard, pipe); err != nil {
-			return nil, err
-		}
 
 		// Update ref on gitopia
 		if strings.HasPrefix(ref.Local, branchPrefix) {
