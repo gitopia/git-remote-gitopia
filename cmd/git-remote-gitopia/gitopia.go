@@ -122,11 +122,7 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 
 	out = append(out, fmt.Sprintf("@refs/heads/%s HEAD", h.remoteRepository.DefaultBranch))
 
-	dir := os.Getenv("GIT_DIR")
-	if strings.HasSuffix(dir, "/.git") {
-		dir = strings.TrimSuffix(dir, "/.git")
-	}
-
+	dir := path.Dir(os.Getenv("GIT_DIR"))
 	lfsConfigPath := path.Join(dir, ".lfsconfig")
 	if _, err := os.Stat(lfsConfigPath); os.IsNotExist(err) {
 		lfsURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
