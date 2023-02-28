@@ -30,7 +30,7 @@ build_tags := $(strip $(build_tags))
 BUILD_FLAGS := -tags "$(build_tags) $(GITOPIA_ENV)"
 
 appname := git-remote-gitopia
-version := 1.4.0
+version := $(shell echo $(shell git describe --tags) | sed 's/^v//')
 
 build = GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/$(appname)$(3) ./cmd/git-remote-gitopia && \
     GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/git-gitopia$(3) ./cmd/git-gitopia && \
@@ -42,7 +42,7 @@ zip = cd build && zip $(appname)_$(version)_$(1)_$(2).zip $(appname)$(3) git-git
 
 .PHONY: build
 
-all: windows darwin linux git_release_tar_gz git_release_zip
+all: darwin linux git_release_tar_gz git_release_zip
 
 clean:
 	rm -rf build/
