@@ -172,15 +172,12 @@ func (gw GitopiaWallet) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.M
 
 	// check fee grant exists
 	fqc := feegrant.NewQueryClient(grpcConn)
-	fr, err := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+	fr, _ := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
 		Granter: config.FeeGranterAddr,
 		Grantee: gw.Address(),
 	})
-	if err != nil {
-		return err
-	}
 
-	if fr.Allowance != nil {
+	if fr != nil {
 		feeGranterAddr, err := sdk.AccAddressFromBech32(config.FeeGranterAddr)
 		if err != nil {
 			return err

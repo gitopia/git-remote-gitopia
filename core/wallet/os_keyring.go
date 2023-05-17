@@ -167,15 +167,12 @@ func (o OSKeyring) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.Msg) e
 
 	// check fee grant exists
 	fqc := feegrant.NewQueryClient(grpcConn)
-	fr, err := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+	fr, _ := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
 		Granter: config.FeeGranterAddr,
 		Grantee: o.Address(),
 	})
-	if err != nil {
-		return err
-	}
 
-	if fr.Allowance != nil {
+	if fr != nil {
 		feeGranterAddr, err := sdk.AccAddressFromBech32(config.FeeGranterAddr)
 		if err != nil {
 			return err
