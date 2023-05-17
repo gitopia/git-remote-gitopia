@@ -2,12 +2,14 @@
 
 All notable changes will be documented here.
 
-## [v1.5.0] - UNRELEASED
+## [v1.5.0] - 2023-05-17
 
 - git credential helper for git lfs
 - Use git cli instead of go-git for fetch/push
 - Common http basic auth for both git push and lfs
 - Refactor wallets
+- Support fee grant
+- Upgrade gitopia version to v2.0.1
 
 ## [v1.4.0] - 2023-02-22
 

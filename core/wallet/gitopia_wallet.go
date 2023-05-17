@@ -21,8 +21,10 @@ import (
 	xauthsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtype "github.com/cosmos/cosmos-sdk/x/auth/types"
-	gitopia "github.com/gitopia/gitopia/app"
-	offchaintypes "github.com/gitopia/gitopia/x/offchain/types"
+	"github.com/cosmos/cosmos-sdk/x/feegrant"
+	"github.com/gitopia/git-remote-gitopia/config"
+	gitopia "github.com/gitopia/gitopia/v2/app"
+	offchaintypes "github.com/gitopia/gitopia/v2/x/offchain/types"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -167,6 +169,30 @@ func (gw GitopiaWallet) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.M
 		return err
 	}
 	txBuilder.SetFeeAmount(fee)
+
+	// check fee grant exists
+	fqc := feegrant.NewQueryClient(grpcConn)
+	fr, err := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+		Granter: config.FeeGranterAddr,
+		Grantee: gw.Address(),
+	})
+	if err != nil {
+		return err
+	}
+
+	if fr.Allowance != nil {
+		feeGranterAddr, err := sdk.AccAddressFromBech32(config.FeeGranterAddr)
+		if err != nil {
+			return err
+		}
+		feePayerAddr, err := sdk.AccAddressFromBech32(gw.Address())
+		if err != nil {
+			return err
+		}
+
+		txBuilder.SetFeeGranter(feeGranterAddr)
+		txBuilder.SetFeePayer(feePayerAddr)
+	}
 
 	// Get chain id for signing transaction
 	serviceClient := tmservice.NewServiceClient(grpcConn)

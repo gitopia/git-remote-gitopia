@@ -3,6 +3,9 @@ package wallet
 import (
 	"errors"
 	"fmt"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"google.golang.org/grpc"
 )
 
 type secretType int
@@ -17,6 +20,7 @@ const (
 
 type Wallet interface {
 	SignData(data []byte) (string, error)
+	SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.Msg) error
 	Type() secretType
 	Address() string
 }

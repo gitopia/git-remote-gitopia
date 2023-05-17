@@ -12,13 +12,15 @@ import (
 	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/gitopia/git-remote-gitopia/config"
-	gitopia "github.com/gitopia/gitopia/app"
-	offchaintypes "github.com/gitopia/gitopia/x/offchain/types"
+	gitopia "github.com/gitopia/gitopia/v2/app"
+	offchaintypes "github.com/gitopia/gitopia/v2/x/offchain/types"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/ignite/cli/ignite/pkg/cosmosaccount"
 	"github.com/ignite/cli/ignite/pkg/cosmosclient"
 	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -37,7 +39,7 @@ var (
 type keyringBackend struct {
 	key     string
 	backend string
-	cc      cosmosclient.Client
+	CC      cosmosclient.Client
 }
 
 func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend {
@@ -45,12 +47,12 @@ func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend
 	return keyringBackend{
 		key:     k,
 		backend: b,
-		cc:      c,
+		CC:      c,
 	}
 }
 
 func (k keyringBackend) address() (string, error) {
-	address, err := k.cc.Address(k.key)
+	address, err := k.CC.Address(k.key)
 	return address, err
 }
 
@@ -157,12 +159,37 @@ func (o OSKeyring) SignData(data []byte) (string, error) {
 	return string(txBz), nil
 }
 
-func (o OSKeyring) SignAndBroadcast(msgs []sdk.Msg) error {
-	account, err := o.kb.cc.Account(o.kb.key)
+func (o OSKeyring) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.Msg) error {
+	account, err := o.kb.CC.Account(o.kb.key)
 	if err != nil {
 		return err
 	}
-	txResp, err := o.kb.cc.BroadcastTx(account, msgs...)
+
+	// check fee grant exists
+	fqc := feegrant.NewQueryClient(grpcConn)
+	fr, err := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+		Granter: config.FeeGranterAddr,
+		Grantee: o.Address(),
+	})
+	if err != nil {
+		return err
+	}
+
+	if fr.Allowance != nil {
+		feeGranterAddr, err := sdk.AccAddressFromBech32(config.FeeGranterAddr)
+		if err != nil {
+			return err
+		}
+		feePayerAddr, err := sdk.AccAddressFromBech32(o.Address())
+		if err != nil {
+			return err
+		}
+
+		o.kb.CC.TxFactory.WithFeeGranter(feeGranterAddr)
+		o.kb.CC.TxFactory.WithFeePayer(feePayerAddr)
+	}
+
+	txResp, err := o.kb.CC.BroadcastTx(account, msgs...)
 	if err != nil {
 		return err
 	}

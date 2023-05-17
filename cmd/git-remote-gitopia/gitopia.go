@@ -19,8 +19,8 @@ import (
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
 	"github.com/gitopia/git-remote-gitopia/core/wallet"
-	gitopiaTypes "github.com/gitopia/gitopia/x/gitopia/types"
-	"github.com/gitopia/gitopia/x/gitopia/utils"
+	gitopiaTypes "github.com/gitopia/gitopia/v2/x/gitopia/types"
+	"github.com/gitopia/gitopia/v2/x/gitopia/utils"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -237,14 +237,14 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			force = true
 		}
 
+		if h.wallet.Type() == wallet.LEDGER {
+			remote.Logger.Println("Please sign the git server request on your ledger device.")
+		}
+
 		data := []byte("test")
 		signature, err := h.wallet.SignData(data)
 		if err != nil {
 			return nil, errors.Wrap(err, "error signing data")
-		}
-
-		if h.wallet.Type() == wallet.LEDGER {
-			remote.Logger.Println("Please sign the git server request on your ledger device.")
 		}
 
 		credential := fmt.Sprintf("%s:%s", h.wallet.Address(), signature)
@@ -332,21 +332,8 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		}, deleteTags))
 	}
 
-	switch v := h.wallet.(type) {
-	case wallet.OSKeyring:
-		if err := v.SignAndBroadcast(msg); err != nil {
-			return nil, err
-		}
-	case wallet.GitopiaWallet:
-		if err := v.SignAndBroadcast(h.grpcConn, msg); err != nil {
-			return nil, err
-		}
-	case wallet.Ledger:
-		if err := v.SignAndBroadcast(h.grpcConn, msg); err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errors.New("unknown wallet type")
+	if err := h.wallet.SignAndBroadcast(h.grpcConn, msg); err != nil {
+		return nil, err
 	}
 
 	return &res, nil
