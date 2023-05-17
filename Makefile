@@ -30,18 +30,19 @@ build_tags := $(strip $(build_tags))
 BUILD_FLAGS := -tags "$(build_tags) $(GITOPIA_ENV)"
 
 appname := git-remote-gitopia
-version := 1.4.0
+version := $(shell echo $(shell git describe --tags) | sed 's/^v//')
 
 build = GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/$(appname)$(3) ./cmd/git-remote-gitopia && \
-    GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/git-gitopia$(3) ./cmd/git-gitopia
-tar = cd build && tar -cvzf $(appname)_$(version)_$(1)_$(2).tar.gz $(appname)$(3) git-gitopia$(3) && \
-    rm $(appname)$(3) && rm git-gitopia$(3)
-zip = cd build && zip $(appname)_$(version)_$(1)_$(2).zip $(appname)$(3) git-gitopia$(3) && \
-    rm $(appname)$(3) && rm git-gitopia$(3) 
+    GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/git-gitopia$(3) ./cmd/git-gitopia && \
+	GOOS=$(1) GOARCH=$(2) go build $(BUILD_FLAGS) -o build/git-credential-gitopia$(3) ./cmd/git-credential-gitopia
+tar = cd build && tar -cvzf $(appname)_$(version)_$(1)_$(2).tar.gz $(appname)$(3) git-gitopia$(3) git-credential-gitopia$(3) && \
+    rm $(appname)$(3) && rm git-gitopia$(3) && rm git-credential-gitopia$(3)
+zip = cd build && zip $(appname)_$(version)_$(1)_$(2).zip $(appname)$(3) git-gitopia$(3) git-credential-gitopia$(3) && \
+    rm $(appname)$(3) && rm git-gitopia$(3) && rm git-credential-gitopia$(3)
 
 .PHONY: build
 
-all: windows darwin linux git_release_tar_gz git_release_zip
+all: darwin linux git_release_tar_gz git_release_zip
 
 clean:
 	rm -rf build/
@@ -99,6 +100,8 @@ install: go.sum
 	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-remote-gitopia
 	@echo "--> Installing git-gitopia"
 	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-gitopia
+	@echo "--> Installing git-credential-gitopia"
+	@go install -mod=readonly $(BUILD_FLAGS) ./cmd/git-credential-gitopia
 
 go.sum: go.mod
 	@echo "--> Ensure dependencies have not been modified"
