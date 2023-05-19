@@ -163,12 +163,13 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 		args = append(args, "--force")
 	}
 	cmd, outPipe := core.GitCommand("git", args...)
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
 		out, e := io.ReadAll(outPipe)
 		return errors.Wrapf(err, `error fetching from remote repository. 
 		output %s, output read error %s`, string(out), e.Error())
 	}
 	defer core.CleanUpProcessGroup(cmd)
+	cmd.Wait()
 
 	return nil
 }
