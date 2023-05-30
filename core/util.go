@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"syscall"
 )
 
 func GetLocalDir() (string, error) {
@@ -22,7 +21,6 @@ func GetLocalDir() (string, error) {
 
 func GitCommand(name string, args ...string) (*exec.Cmd, io.Reader) {
 	cmd := exec.Command(name, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = os.Environ()
 
 	r, _ := cmd.StdoutPipe()
@@ -37,8 +35,8 @@ func CleanUpProcessGroup(cmd *exec.Cmd) {
 	}
 
 	process := cmd.Process
-	if process != nil && process.Pid > 0 {
-		syscall.Kill(-process.Pid, syscall.SIGTERM)
+	if process != nil {
+		process.Signal(os.Kill)
 	}
 
 	go cmd.Wait()
