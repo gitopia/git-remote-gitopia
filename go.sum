@@ -210,6 +210,8 @@ github.com/ghodss/yaml v1.0.0 h1:wQHKEahhL6wmXdzwWG11gIVCkOv05bNOh+Rxn0yngAk=
 github.com/ghodss/yaml v1.0.0/go.mod h1:4dBDuWmgqj2HViK6kFavaiC9ZROes6MMH2rRYeMEF04=
 github.com/gitopia/gitopia/v2 v2.0.1 h1:SeHwKkUkA+bqEzsgVimsOb5v6A1wL6O0zqQg/PSSl5c=
 github.com/gitopia/gitopia/v2 v2.0.1/go.mod h1:ZEEo2wHSxjJL3tcGg+ZenFlYMhfqFzwJkGkNMkgA9lE=
+github.com/gitopia/ignite-cli v0.24.0-fee-grant.3 h1:ClWf30rg8Qr/Nfam5Lp4UyVA0uNlDPmJxt4RktcmEio=
+github.com/gitopia/ignite-cli v0.24.0-fee-grant.3/go.mod h1:XlqM9HK751rcKZg7RfrP9KiJRAVi4XfZskhGnHPgLr0=
 github.com/gliderlabs/ssh v0.3.5 h1:OcaySEmAQJgyYcArR+gGGTHCyE7nvhEMTlYY+Dp8CpY=
 github.com/gliderlabs/ssh v0.3.5/go.mod h1:8XB4KraRrX39qHhT6yxPsHedjA08I/uBVwj4xC+/+z4=
 github.com/go-git/gcfg v1.5.0 h1:Q5ViNfGF8zFgyJWPqYwA7qGFoMTEiBmdlkcfRmpIMa4=
@@ -372,8 +374,6 @@ github.com/hdevalence/ed25519consensus v0.0.0-20220222234857-c00d1f31bab3/go.mod
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
 github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
-github.com/ignite/cli v0.24.0 h1:2cggSIsT4MT9IIS4/8XqlwgekI0YWPMYeULLGrTgCUY=
-github.com/ignite/cli v0.24.0/go.mod h1:XlqM9HK751rcKZg7RfrP9KiJRAVi4XfZskhGnHPgLr0=
 github.com/imdario/mergo v0.3.13 h1:lFzP57bqS/wsqKssCGmtLAb8A0wKjLGrve2q3PPVcBk=
 github.com/imdario/mergo v0.3.13/go.mod h1:4lJ1jqUDcsbIECGy0RUJAXNIhg+6ocWgb1ALK2O4oXg=
 github.com/improbable-eng/grpc-web v0.15.0 h1:BN+7z6uNXZ1tQGcNAuaU1YjsLTApzkjt2tzCixLaUPQ=

@@ -177,13 +177,7 @@ func (o OSKeyring) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.Msg) e
 		if err != nil {
 			return err
 		}
-		feePayerAddr, err := sdk.AccAddressFromBech32(o.Address())
-		if err != nil {
-			return err
-		}
-
-		o.kb.CC.TxFactory.WithFeeGranter(feeGranterAddr)
-		o.kb.CC.TxFactory.WithFeePayer(feePayerAddr)
+		cosmosclient.WithFeeGranterAddress(feeGranterAddr)(&o.kb.CC)
 	}
 
 	txResp, err := o.kb.CC.BroadcastTx(account, msgs...)
