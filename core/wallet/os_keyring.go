@@ -182,8 +182,10 @@ func (o OSKeyring) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.Msg) e
 			return err
 		}
 
-		o.kb.CC.TxFactory.WithFeeGranter(feeGranterAddr)
-		o.kb.CC.TxFactory.WithFeePayer(feePayerAddr)
+		// Configure feegranter in cosmosclient
+		cosmosclient.WithFeeGranterAddress(feeGranterAddr)(&o.kb.CC)
+		
+		o.kb.CC.TxFactory = o.kb.CC.TxFactory.WithFeePayer(feePayerAddr)
 	}
 
 	txResp, err := o.kb.CC.BroadcastTx(account, msgs...)

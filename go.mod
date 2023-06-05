@@ -181,3 +181,5 @@ require (
 replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 
 replace github.com/tendermint/tendermint => github.com/cometbft/cometbft v0.34.27
+
+replace github.com/ignite/cli => github.com/gitopia/ignite-cli v0.24.0-fee-grant.3
