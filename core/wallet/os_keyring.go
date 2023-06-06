@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/client/flags"
+	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
@@ -12,13 +15,23 @@ import (
 	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/x/feegrant"
+	"github.com/cosmos/cosmos-sdk/version"
 	"github.com/gitopia/git-remote-gitopia/config"
+	glib "github.com/gitopia/gitopia-go"
+	"github.com/gitopia/gitopia-go/logger"
 	gitopia "github.com/gitopia/gitopia/v2/app"
 	offchaintypes "github.com/gitopia/gitopia/v2/x/offchain/types"
 	goGitConfig "github.com/go-git/go-git/v5/config"
-	"github.com/ignite/cli/ignite/pkg/cosmosaccount"
-	"github.com/ignite/cli/ignite/pkg/cosmosclient"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/pflag"
+
+	"github.com/cosmos/cosmos-sdk/std"
+	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	gtypes "github.com/gitopia/gitopia/v2/x/gitopia/types"
+	otypes "github.com/gitopia/gitopia/v2/x/offchain/types"
+	rtypes "github.com/gitopia/gitopia/v2/x/rewards/types"
+
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -39,21 +52,15 @@ var (
 type keyringBackend struct {
 	key     string
 	backend string
-	CC      cosmosclient.Client
+	CC      glib.Client
 }
 
-func newKeyringBackend(k string, b string, c cosmosclient.Client) keyringBackend {
-	c.TxFactory = c.TxFactory.WithGasPrices(config.GasPrices)
+func newKeyringBackend(k string, b string, c glib.Client) keyringBackend {
 	return keyringBackend{
 		key:     k,
 		backend: b,
 		CC:      c,
 	}
-}
-
-func (k keyringBackend) address() (string, error) {
-	address, err := k.CC.Address(k.key)
-	return address, err
 }
 
 type OSKeyring struct {
@@ -65,7 +72,6 @@ type OSKeyring struct {
 func InitOSKeyringWallet() (Wallet, error) {
 	var key string
 	var backend string
-	var cc cosmosclient.Client
 
 	conf, err := goGitConfig.LoadConfig(goGitConfig.GlobalScope)
 	if err != nil {
@@ -85,28 +91,78 @@ func InitOSKeyringWallet() (Wallet, error) {
 		backend = keyring.BackendOS // default to OS. same as cosmos keys subcommand
 	}
 
-	cc, err = cosmosclient.New(context.Background(),
-		cosmosclient.WithNodeAddress(config.TmAddr),
-		// same service name used in both helper and keys management app
-		cosmosclient.WithKeyringServiceName(AppName),                           // not suported on macos
-		cosmosclient.WithKeyringBackend(cosmosaccount.KeyringBackend(backend)), // not all backends supported by cosmos are supported by cosmos client
-		cosmosclient.WithAddressPrefix(AccountAddressPrefix),
-	)
+	l := logrus.New()
+	l.SetOutput(os.Stderr)
+	ctx := logger.ContextWithValue(context.Background(), l)
+	glib.WithGitopiaAddr(config.GRPCHost)
+	// glib.WithFeeGranter(config.FeeGranterAddr)
+	cc, err := NewContext(key)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating cosmos client context")
+	}
+	txf := tx.NewFactoryCLI(cc, &pflag.FlagSet{}).WithGasPrices(config.GasPrices)
+	gc, err := glib.NewClient(ctx, cc, txf)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating cosmos client")
 	}
 
 	o := OSKeyring{
-		kb:      newKeyringBackend(key, backend, cc),
+		kb:      newKeyringBackend(key, backend, gc),
 		secType: KEYRING_BACKEND,
 	}
 
-	o.address, err = o.kb.address()
-	if err != nil {
-		return nil, err
-	}
+	o.address = o.kb.CC.Address().String()
 
 	return o, nil
+}
+
+func NewContext(from string) (client.Context, error) {
+	version.Name = AppName
+	clientCtx := client.Context{}
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	std.RegisterInterfaces(interfaceRegistry)
+	cryptocodec.RegisterInterfaces(interfaceRegistry)
+	authtypes.RegisterInterfaces(interfaceRegistry)
+	gtypes.RegisterInterfaces(interfaceRegistry)
+	rtypes.RegisterInterfaces(interfaceRegistry)
+	otypes.RegisterInterfaces(interfaceRegistry)
+
+	marshaler := codec.NewProtoCodec(interfaceRegistry)
+	txCfg := authtx.NewTxConfig(marshaler, authtx.DefaultSignModes)
+	clientCtx = clientCtx.
+		WithCodec(marshaler).
+		WithInterfaceRegistry(interfaceRegistry).
+		WithAccountRetriever(authtypes.AccountRetriever{}).
+		WithTxConfig(txCfg).
+		WithInput(os.Stdin)
+
+	clientCtx = clientCtx.WithChainID(config.ChainId)
+	clientCtx = clientCtx.WithNodeURI(config.TmAddr)
+	c, err := client.NewClientFromNode(clientCtx.NodeURI)
+	if err != nil {
+		return clientCtx, errors.Wrap(err, "error creatig tm client")
+	}
+	clientCtx = clientCtx.WithClient(c)
+	clientCtx = clientCtx.WithBroadcastMode(flags.BroadcastSync)
+	clientCtx = clientCtx.WithSkipConfirmation(true)
+
+	kr, err := client.NewKeyringFromBackend(clientCtx, keyring.BackendOS)
+	if err != nil {
+		return clientCtx, errors.Wrap(err, "error creating keyring backend")
+	}
+	clientCtx = clientCtx.WithKeyring(kr)
+
+	fromAddr, fromName, _, err := client.GetFromFields(clientCtx, kr, from)
+	if err != nil {
+		return clientCtx, errors.Wrap(err, "error parsing from Addr")
+	}
+
+	clientCtx = clientCtx.WithFrom(from).WithFromAddress(fromAddr).WithFromName(fromName)
+
+	feeGranterAddr := sdk.MustAccAddressFromBech32(config.FeeGranterAddr)
+	clientCtx = clientCtx.WithFeeGranterAddress(feeGranterAddr)
+	return clientCtx, nil
 }
 
 func (o OSKeyring) SignData(data []byte) (string, error) {
@@ -160,35 +216,7 @@ func (o OSKeyring) SignData(data []byte) (string, error) {
 }
 
 func (o OSKeyring) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.Msg) error {
-	account, err := o.kb.CC.Account(o.kb.key)
-	if err != nil {
-		return err
-	}
-
-	// check fee grant exists
-	fqc := feegrant.NewQueryClient(grpcConn)
-	fr, _ := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
-		Granter: config.FeeGranterAddr,
-		Grantee: o.Address(),
-	})
-
-	if fr != nil {
-		feeGranterAddr, err := sdk.AccAddressFromBech32(config.FeeGranterAddr)
-		if err != nil {
-			return err
-		}
-		cosmosclient.WithFeeGranterAddress(feeGranterAddr)(&o.kb.CC)
-	}
-
-	txResp, err := o.kb.CC.BroadcastTx(account, msgs...)
-	if err != nil {
-		return err
-	}
-	if txResp.TxResponse.Code != 0 {
-		return errors.Wrap(err, "error broadcasting transaction")
-	}
-
-	return nil
+	return o.kb.CC.BroadcastTxAndWait(context.Background(), msgs...)
 }
 
 func (o OSKeyring) Address() string {

@@ -12,9 +12,9 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/git-remote-gitopia",
             "buildFlags": "--tags testing",
-            "cwd": "/Users/faza/Code/tmp/repo",
-            "args": ["origin", "gitopia://user/repo"],
-            "env": {"GIT_DIR": "/Users/faza/Code/tmp/repo/.git", "GITOPIA_WALLET": "/Users/faza/Downloads/test.json"},
+            "cwd": "/private/tmp/repos/test3",
+            "args": ["origin", "gitopia://u11/banana"],
+            "env": {"GIT_DIR": "/private/tmp/repos/test3/.git", "GITOPIA_WALLET": "/Users/faza/Downloads/test.json"},
             "console": "integratedTerminal"
         }
     ]

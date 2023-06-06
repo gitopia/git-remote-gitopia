@@ -3,6 +3,7 @@
 package config
 
 const (
+	ChainId        = "gitopia"
 	GRPCHost       = "grpc.gitopia.com:9090"
 	GitServerHost  = "https://server.gitopia.com"
 	TmAddr         = "https://rpc.gitopia.com:443"
