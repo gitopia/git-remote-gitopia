@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/cosmos/cosmos-sdk v0.46.12
-	github.com/gitopia/gitopia-go v0.3.3
+	github.com/gitopia/gitopia-go v0.3.4-0.20230606152806-95aa197de17e
 	github.com/gitopia/gitopia/v2 v2.0.1
 	github.com/go-git/go-git/v5 v5.5.1
 	github.com/pkg/errors v0.9.1

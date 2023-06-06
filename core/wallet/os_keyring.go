@@ -95,12 +95,12 @@ func InitOSKeyringWallet() (Wallet, error) {
 	l.SetOutput(os.Stderr)
 	ctx := logger.ContextWithValue(context.Background(), l)
 	glib.WithGitopiaAddr(config.GRPCHost)
-	// glib.WithFeeGranter(config.FeeGranterAddr)
+	glib.WithGasPrices(config.GasPrices)
 	cc, err := NewContext(key)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating cosmos client context")
 	}
-	txf := tx.NewFactoryCLI(cc, &pflag.FlagSet{}).WithGasPrices(config.GasPrices)
+	txf := tx.NewFactoryCLI(cc, &pflag.FlagSet{}).WithGasAdjustment(GAS_ADJUSTMENT)
 	gc, err := glib.NewClient(ctx, cc, txf)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating cosmos client")
