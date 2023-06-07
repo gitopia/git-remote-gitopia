@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"path"
@@ -161,11 +162,14 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
 	if force {
 		args = append(args, "--force")
 	}
-	cmd, _ := core.GitCommand("git", args...)
-	if err := cmd.Run(); err != nil {
-		return errors.Wrap(err, "error fetching from remote repository")
+	cmd, outPipe := core.GitCommand("git", args...)
+	if err := cmd.Start(); err != nil {
+		out, e := io.ReadAll(outPipe)
+		return errors.Wrapf(err, `error fetching from remote repository. 
+		output %s, output read error %s`, string(out), e.Error())
 	}
 	defer core.CleanUpProcessGroup(cmd)
+	cmd.Wait()
 
 	return nil
 }
@@ -209,7 +213,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	var setTags []gitopiaTypes.MsgMultiSetTag_Tag
 	var deleteBranches, deleteTags []string
 	var res []string
-
+	  
 	for _, ref := range refsToPush {
 		if ref.Local == "" {
 			if strings.HasPrefix(ref.Remote, branchPrefix) {
