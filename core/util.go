@@ -23,10 +23,9 @@ func GitCommand(name string, args ...string) (*exec.Cmd, io.Reader) {
 	cmd := exec.Command(name, args...)
 	cmd.Env = os.Environ()
 
-	r, _ := cmd.StdoutPipe()
-	cmd.Stderr = cmd.Stdout
-
-	return cmd, r
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd, nil
 }
 
 func CleanUpProcessGroup(cmd *exec.Cmd) {
