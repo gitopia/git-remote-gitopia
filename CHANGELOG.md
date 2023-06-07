@@ -2,6 +2,11 @@
 
 All notable changes will be documented here.
 
+## [v1.6.0] - 2023-06-07
+
+- fix os keyring wallet in case of feegrant
+- use gitopia-go instead of cosmosclient for os keyring wallet support
+
 ## [v1.5.0] - 2023-05-17
 
 - git credential helper for git lfs
