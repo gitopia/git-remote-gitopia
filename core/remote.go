@@ -14,7 +14,7 @@ import (
 
 type RemoteHandler interface {
 	List(remote *Remote, forPush bool) ([]string, error)
-	Fetch(remote *Remote, sha, ref string) error
+	Fetch(remote *Remote, refsToFetch []RefToFetch) error
 	Push(remote *Remote, refsToPush []RefToPush) (*[]string, error)
 
 	Initialize(remote *Remote) error
@@ -30,13 +30,20 @@ type Remote struct {
 
 	Handler RemoteHandler
 
-	todo     []func() (string, error)
-	pushList []func() (*[]string, error)
+	todo      []func() (string, error)
+	pushList  []func() (*[]string, error)
+	fetchList []func() error
+	Force     bool
 }
 
 type RefToPush struct {
 	Local  string
 	Remote string
+}
+
+type RefToFetch struct {
+	Sha string
+	Ref string
 }
 
 func NewRemote(handler RemoteHandler, reader io.Reader, writer io.Writer, logger *log.Logger) (*Remote, error) {
@@ -95,20 +102,17 @@ func (r *Remote) push(refsToPush []RefToPush) {
 	})
 }
 
-func (r *Remote) fetch(sha, ref string) {
-	r.todo = append(r.todo, func() (string, error) {
-		err := r.Handler.Fetch(r, sha, ref)
-		if err != nil {
-			return "", err
-		}
-
-		return "", nil
+func (r *Remote) fetch(refsToFetch []RefToFetch) {
+	r.fetchList = append(r.fetchList, func() error {
+		return r.Handler.Fetch(r, refsToFetch)
 	})
 }
 
 func (r *Remote) ProcessCommands() error {
 	reader := bufio.NewReader(r.reader)
 	var refsToPush []RefToPush
+	var refsToFetch []RefToFetch
+
 	prevCommand := ""
 loop:
 	for {
@@ -143,7 +147,16 @@ loop:
 			//r.push(refs[0], refs[1])
 		case strings.HasPrefix(command, "fetch "):
 			parts := strings.Split(command, " ")
-			r.fetch(parts[1], parts[2])
+
+			if strings.HasPrefix(parts[2], "+") {
+				r.Force = true
+			}
+
+			refsToFetch = append(refsToFetch, RefToFetch{
+				Sha: parts[1],
+				Ref: parts[2],
+			})
+			// r.fetch(parts[1], parts[2])
 		case command == "":
 			fallthrough
 		case command == "\n":
@@ -162,6 +175,24 @@ loop:
 					}
 					r.Printf("\n")
 				}
+
+				r.todo = nil
+				break loop
+			}
+
+			if strings.HasPrefix(prevCommand, "fetch ") {
+				r.fetch(refsToFetch)
+				for _, task := range r.fetchList {
+					err = task()
+					if err != nil {
+						return err
+					}
+				}
+
+				for range refsToFetch {
+					r.Printf("ok \n")
+				}
+				r.Printf("\n")
 
 				r.todo = nil
 				break loop
