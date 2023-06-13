@@ -189,9 +189,6 @@ loop:
 					}
 				}
 
-				for range refsToFetch {
-					r.Printf("ok \n")
-				}
 				r.Printf("\n")
 
 				r.todo = nil
