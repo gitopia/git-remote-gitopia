@@ -151,6 +151,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 	if !remote.Force {
 		args := []string{
 			"fetch",
+			"--no-write-fetch-head",
 			remoteURL,
 		}
 		for _, ref := range refsToFetch {
@@ -177,6 +178,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 
 		args := []string{
 			"fetch",
+			"--no-write-fetch-head",
 			remoteURL,
 			ref.Ref,
 		}
