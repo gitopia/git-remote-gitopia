@@ -198,7 +198,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 	return nil
 }
 
-func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) (*[]string, error) {
+func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) ([]string, error) {
 	var err error
 
 	if h.wallet == nil {
@@ -364,7 +364,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, err
 	}
 
-	return &res, nil
+	return res, nil
 }
 
 func (h *GitopiaHandler) havePushPermission(walletAddress string) (havePermission bool, err error) {
