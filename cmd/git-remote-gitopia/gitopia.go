@@ -145,36 +145,60 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 	return out, nil
 }
 
-func (h *GitopiaHandler) Fetch(remote *core.Remote, sha, ref string) error {
+func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetch) error {
 	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
 
-	force := false
-	if strings.HasPrefix(ref, "+") {
-		ref = strings.TrimPrefix(ref, "+")
-		force = true
+	if !remote.Force {
+		args := []string{
+			"fetch",
+			"--no-write-fetch-head",
+			remoteURL,
+		}
+		for _, ref := range refsToFetch {
+			args = append(args, ref.Ref)
+		}
+		cmd, outPipe := core.GitCommand("git", args...)
+		if err := cmd.Start(); err != nil {
+			out, e := io.ReadAll(outPipe)
+			return errors.Wrapf(err, `error fetching from remote repository. 
+			output %s, output read error %s`, string(out), e.Error())
+		}
+		defer core.CleanUpProcessGroup(cmd)
+		cmd.Wait()
+
+		return nil
 	}
 
-	args := []string{
-		"fetch",
-		remoteURL,
-		ref,
-	}
-	if force {
-		args = append(args, "--force")
-	}
-	cmd, outPipe := core.GitCommand("git", args...)
-	if err := cmd.Start(); err != nil {
-		out, e := io.ReadAll(outPipe)
-		return errors.Wrapf(err, `error fetching from remote repository. 
+	for _, ref := range refsToFetch {
+		force := false
+		if strings.HasPrefix(ref.Ref, "+") {
+			ref.Ref = strings.TrimPrefix(ref.Ref, "+")
+			force = true
+		}
+
+		args := []string{
+			"fetch",
+			"--no-write-fetch-head",
+			remoteURL,
+			ref.Ref,
+		}
+		if force {
+			args = append(args, "--force")
+		}
+		cmd, outPipe := core.GitCommand("git", args...)
+		if err := cmd.Start(); err != nil {
+			out, e := io.ReadAll(outPipe)
+			return errors.Wrapf(err, `error fetching from remote repository. 
 		output %s, output read error %s`, string(out), e.Error())
+		}
+		defer core.CleanUpProcessGroup(cmd)
+		cmd.Wait()
 	}
-	defer core.CleanUpProcessGroup(cmd)
-	cmd.Wait()
 
 	return nil
 }
 
-func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) (*[]string, error) {
+func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) ([]string, error) {
 	var err error
 
 	if h.wallet == nil {
@@ -213,7 +237,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	var setTags []gitopiaTypes.MsgMultiSetTag_Tag
 	var deleteBranches, deleteTags []string
 	var res []string
-	  
+
 	for _, ref := range refsToPush {
 		if ref.Local == "" {
 			if strings.HasPrefix(ref.Remote, branchPrefix) {
@@ -340,7 +364,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, err
 	}
 
-	return &res, nil
+	return res, nil
 }
 
 func (h *GitopiaHandler) havePushPermission(walletAddress string) (havePermission bool, err error) {
