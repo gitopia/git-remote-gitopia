@@ -3,6 +3,7 @@ package lfs
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -19,18 +20,23 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-var initCmd = &cobra.Command{
-	Use:   "init <remote_name>",
-	Short: "Initialize the lfsconfig for the gitopia remote",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		dir := path.Dir(os.Getenv("GIT_DIR"))
-		if dir == "" {
-			return errors.New("not a git repository")
-		}
+func InitCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init <remote_name>",
+		Short: "Initialize the lfsconfig for the gitopia remote",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dir := path.Dir(os.Getenv("GIT_DIR"))
+			if dir == "" {
+				return errors.New("not a git repository")
+			}
 
-		lfsConfigPath := path.Join(dir, ".lfsconfig")
-		if _, err := os.Stat(lfsConfigPath); os.IsNotExist(err) {
+			lfsConfigPath := path.Join(dir, ".lfsconfig")
+			if _, err := os.Stat(lfsConfigPath); !errors.Is(err, fs.ErrNotExist) {
+				return errors.New(".lfsconfig file already exists")
+
+			}
+
 			c := exec.Command("git", "remote", "get-url", args[0])
 			output, err := c.Output()
 			if err != nil {
@@ -68,21 +74,16 @@ var initCmd = &cobra.Command{
 			remoteRepository := *res.Repository
 			lfsURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, remoteRepository.Id)
 
-			cmd := core.GitCommand("git", "config",
+			c = core.GitCommand("git", "config",
 				fmt.Sprintf("--file=%s", lfsConfigPath),
 				"lfs.url",
 				lfsURL)
-			if err := cmd.Run(); err != nil {
+			if err := c.Run(); err != nil {
 				return errors.Wrap(err, "error creating .lfsconfig")
 			}
 
 			return nil
-		}
-
-		return errors.New(".lfsconfig file already exists")
-	},
-}
-
-func init() {
-	Commands.AddCommand(initCmd)
+		},
+	}
+	return cmd
 }
