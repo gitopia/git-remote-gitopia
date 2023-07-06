@@ -1,11 +1,21 @@
 package core
 
 import (
-	"io"
+	"errors"
 	"os"
 	"os/exec"
 	"path"
+	"regexp"
+	"strings"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
 )
+
+const (
+	GITOPIA_PREFIX = "gitopia://"
+)
+
+var ErrInvalidGitopiaRemoteURL = errors.New("invalid gitopia remote url")
 
 func GetLocalDir() (string, error) {
 	localdir := path.Join(os.Getenv("GIT_DIR"))
@@ -19,13 +29,13 @@ func GetLocalDir() (string, error) {
 	return localdir, nil
 }
 
-func GitCommand(name string, args ...string) (*exec.Cmd, io.Reader) {
+func GitCommand(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
 	cmd.Env = os.Environ()
-
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd, nil
+
+	return cmd
 }
 
 func CleanUpProcessGroup(cmd *exec.Cmd) {
@@ -39,4 +49,34 @@ func CleanUpProcessGroup(cmd *exec.Cmd) {
 	}
 
 	go cmd.Wait()
+}
+
+func ValidateGitopiaRemoteURL(remoteURL string) (remoteUserId string, remoteRepositoryName string, err error) {
+	if strings.HasPrefix(remoteURL, GITOPIA_PREFIX) {
+		s := strings.TrimPrefix(remoteURL, GITOPIA_PREFIX)
+		sp := strings.Split(s, "/")
+
+		if len(sp) != 2 {
+			return "", "", ErrInvalidGitopiaRemoteURL
+		}
+		remoteUserId = sp[0]
+		remoteRepositoryName = sp[1]
+
+		_, err := sdk.AccAddressFromBech32(remoteUserId)
+		if err != nil {
+			if len(remoteUserId) < 3 || len(remoteUserId) > 39 {
+				return "", "", ErrInvalidGitopiaRemoteURL
+			}
+			valid, err := regexp.MatchString("^[a-zA-Z0-9]+(?:[-]?[a-zA-Z0-9])*$", remoteUserId)
+			if err != nil {
+				return "", "", ErrInvalidGitopiaRemoteURL
+			}
+			if !valid {
+				return "", "", ErrInvalidGitopiaRemoteURL
+			}
+		}
+		return remoteUserId, remoteRepositoryName, nil
+	}
+
+	return "", "", ErrInvalidGitopiaRemoteURL
 }

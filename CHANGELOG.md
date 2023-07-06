@@ -2,6 +2,13 @@
 
 All notable changes will be documented here.
 
+## [v1.7.0] - UNRELEASED
+
+- Command to initialize lfs config
+  - `git gitopia lfs init <remote_name>`
+- Performance improvements in fetch
+- Show progress in fetch and push
+
 ## [v1.6.0] - 2023-06-07
 
 - fix os keyring wallet in case of feegrant
