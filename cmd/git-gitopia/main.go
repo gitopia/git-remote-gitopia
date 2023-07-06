@@ -12,6 +12,7 @@ import (
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/version"
+	"github.com/gitopia/git-remote-gitopia/cmd/git-gitopia/lfs"
 	"github.com/spf13/cobra"
 )
 
@@ -48,6 +49,7 @@ func main() {
 		},
 	}
 	cmd.AddCommand(keys.Commands("."))
+	cmd.AddCommand(lfs.Commands)
 	err := cmd.ExecuteContext(ctx)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err.Error())
