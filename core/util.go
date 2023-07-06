@@ -2,7 +2,6 @@ package core
 
 import (
 	"errors"
-	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -30,13 +29,13 @@ func GetLocalDir() (string, error) {
 	return localdir, nil
 }
 
-func GitCommand(name string, args ...string) (*exec.Cmd, io.Reader) {
+func GitCommand(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
 	cmd.Env = os.Environ()
-
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd, nil
+
+	return cmd
 }
 
 func CleanUpProcessGroup(cmd *exec.Cmd) {

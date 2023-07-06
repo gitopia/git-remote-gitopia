@@ -3,8 +3,8 @@ package lfs
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
+	"os/exec"
 	"path"
 	"strings"
 
@@ -31,22 +31,13 @@ var initCmd = &cobra.Command{
 
 		lfsConfigPath := path.Join(dir, ".lfsconfig")
 		if _, err := os.Stat(lfsConfigPath); os.IsNotExist(err) {
-			c, buf := core.GitCommand("git", "remote", "get-url", args[0])
-			if err := c.Start(); err != nil {
-				return err
-			}
-
-			output, err := io.ReadAll(buf)
+			c := exec.Command("git", "remote", "get-url", args[0])
+			output, err := c.Output()
 			if err != nil {
-				return err
-			}
-
-			if err := c.Wait(); err != nil {
-				return err
+				return errors.Wrap(err, "error reading the remote url")
 			}
 
 			remoteURL := strings.TrimSpace(string(output))
-
 			remoteUserId, remoteRepositoryName, err := core.ValidateGitopiaRemoteURL(string(remoteURL))
 			if err != nil {
 				return err
@@ -77,14 +68,10 @@ var initCmd = &cobra.Command{
 			remoteRepository := *res.Repository
 			lfsURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, remoteRepository.Id)
 
-			args := []string{
-				"config",
+			cmd := core.GitCommand("git", "config",
 				fmt.Sprintf("--file=%s", lfsConfigPath),
 				"lfs.url",
-				lfsURL,
-			}
-
-			cmd, _ := core.GitCommand("git", args...)
+				lfsURL)
 			if err := cmd.Run(); err != nil {
 				return errors.Wrap(err, "error creating .lfsconfig")
 			}

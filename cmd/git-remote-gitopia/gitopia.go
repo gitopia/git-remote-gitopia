@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"math"
 	"os"
 	"strings"
@@ -137,14 +136,10 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 		for _, ref := range refsToFetch {
 			args = append(args, ref.Ref)
 		}
-		cmd, outPipe := core.GitCommand("git", args...)
-		if err := cmd.Start(); err != nil {
-			out, e := io.ReadAll(outPipe)
-			return errors.Wrapf(err, `error fetching from remote repository. 
-			output %s, output read error %s`, string(out), e.Error())
+		cmd := core.GitCommand("git", args...)
+		if err := cmd.Run(); err != nil {
+			return errors.Wrap(err, "error fetching from remote repository")
 		}
-		defer core.CleanUpProcessGroup(cmd)
-		cmd.Wait()
 
 		return nil
 	}
@@ -165,14 +160,10 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 		if force {
 			args = append(args, "--force")
 		}
-		cmd, outPipe := core.GitCommand("git", args...)
-		if err := cmd.Start(); err != nil {
-			out, e := io.ReadAll(outPipe)
-			return errors.Wrapf(err, `error fetching from remote repository. 
-		output %s, output read error %s`, string(out), e.Error())
+		cmd := core.GitCommand("git", args...)
+		if err := cmd.Run(); err != nil {
+			return errors.Wrap(err, "error fetching from remote repository")
 		}
-		defer core.CleanUpProcessGroup(cmd)
-		cmd.Wait()
 	}
 
 	return nil
@@ -270,11 +261,10 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		if force {
 			args = append(args, "--force")
 		}
-		cmd, _ := core.GitCommand("git", args...)
+		cmd := core.GitCommand("git", args...)
 		if err := cmd.Run(); err != nil {
 			return nil, errors.Wrap(err, "error pushing to remote repository")
 		}
-		defer core.CleanUpProcessGroup(cmd)
 
 		// Update ref on gitopia
 		if strings.HasPrefix(ref.Local, branchPrefix) {
