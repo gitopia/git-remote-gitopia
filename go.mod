@@ -176,3 +176,5 @@ require (
 replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 
 replace github.com/tendermint/tendermint => github.com/cometbft/cometbft v0.34.27
+
+replace github.com/gitopia/gitopia-go => /users/jananianbarasan/go/src/github.com/gitopia/gitopia-go
