@@ -91,7 +91,7 @@ func InitOSKeyringWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
 	glib.WithChainId(config.ChainId)
 	glib.WithTmAddr(config.TmAddr)
 
-	cc, err := glib.GetClientContextWithOptions(AppName, key, backend)
+	cc, err := glib.GetClientContextWithOptions(AppName, backend, key)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating cosmos client context")
 	}
