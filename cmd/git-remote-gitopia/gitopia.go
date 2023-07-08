@@ -15,6 +15,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/query"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
 	"github.com/gitopia/git-remote-gitopia/core/wallet"
@@ -35,8 +36,9 @@ const (
 )
 
 type GitopiaHandler struct {
-	grpcConn    *grpc.ClientConn
-	queryClient gitopiatypes.QueryClient
+	grpcConn       *grpc.ClientConn
+	queryClient    gitopiatypes.QueryClient
+	feegrantClient feegrant.QueryClient
 
 	chainId              string
 	remoteUserId         string
@@ -66,6 +68,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.queryClient = gitopiatypes.NewQueryClient(h.grpcConn)
 	serviceClient := tmservice.NewServiceClient(h.grpcConn)
+	h.feegrantClient = feegrant.NewQueryClient(h.grpcConn)
 
 	// Get chain id for signing transaction
 	nodeInfoRes, err := serviceClient.GetNodeInfo(context.Background(), &tmservice.GetNodeInfoRequest{})
@@ -173,7 +176,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	var err error
 
 	if h.wallet == nil {
-		h.wallet, err = wallet.InitWallet()
+		h.wallet, err = wallet.InitWallet(h.feegrantClient)
 		if err != nil {
 			return nil, err
 		}

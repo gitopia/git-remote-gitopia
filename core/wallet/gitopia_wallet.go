@@ -45,13 +45,14 @@ type GitopiaWalletFile struct {
 }
 
 type GitopiaWallet struct {
-	walletFile GitopiaWalletFile
-	privateKey cryptotypes.PrivKey
-	address    string
-	secType    secretType
+	walletFile     GitopiaWalletFile
+	privateKey     cryptotypes.PrivKey
+	address        string
+	secType        secretType
+	feeGranterAddr string
 }
 
-func InitGitopiaWallet() (Wallet, error) {
+func InitGitopiaWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
 	var buffer []byte
 	var err error
 	gw := GitopiaWallet{}
@@ -83,6 +84,15 @@ func InitGitopiaWallet() (Wallet, error) {
 		return nil, err
 	}
 	gw.address = sdk.AccAddress(gw.privateKey.PubKey().Address()).String()
+
+	fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+		Granter: config.FeeGranterAddr,
+		Grantee: gw.address,
+	})
+
+	if fr != nil {
+		gw.feeGranterAddr = fr.Allowance.Granter
+	}
 
 	return gw, nil
 }
@@ -170,15 +180,8 @@ func (gw GitopiaWallet) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.M
 	}
 	txBuilder.SetFeeAmount(fee)
 
-	// check fee grant exists
-	fqc := feegrant.NewQueryClient(grpcConn)
-	fr, _ := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
-		Granter: config.FeeGranterAddr,
-		Grantee: gw.Address(),
-	})
-
-	if fr != nil {
-		feeGranterAddr, err := sdk.AccAddressFromBech32(config.FeeGranterAddr)
+	if gw.feeGranterAddr != "" {
+		feeGranterAddr, err := sdk.AccAddressFromBech32(gw.feeGranterAddr)
 		if err != nil {
 			return err
 		}

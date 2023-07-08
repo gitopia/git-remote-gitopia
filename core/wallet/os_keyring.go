@@ -13,6 +13,7 @@ import (
 	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/gitopia/git-remote-gitopia/config"
 	glib "github.com/gitopia/gitopia-go"
 	"github.com/gitopia/gitopia-go/logger"
@@ -59,7 +60,7 @@ type OSKeyring struct {
 	secType secretType
 }
 
-func InitOSKeyringWallet() (Wallet, error) {
+func InitOSKeyringWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
 	var key string
 	var backend string
 
@@ -84,12 +85,26 @@ func InitOSKeyringWallet() (Wallet, error) {
 	l := logrus.New()
 	l.SetOutput(os.Stderr)
 	ctx := logger.ContextWithValue(context.Background(), l)
-	glib.WithGitopiaAddr(config.GRPCHost)
+	glib.WithAppName(AppName)
 	glib.WithGasPrices(config.GasPrices)
+	glib.WithGitopiaAddr(config.GRPCHost)
+	glib.WithChainId(config.ChainId)
+	glib.WithTmAddr(config.TmAddr)
+
 	cc, err := glib.GetClientContextWithOptions(AppName, key, backend)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating cosmos client context")
 	}
+
+	fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+		Granter: config.FeeGranterAddr,
+		Grantee: cc.FromAddress.String(),
+	})
+
+	if fr != nil {
+		cc.WithFeeGranterAddress(sdk.MustAccAddressFromBech32(fr.Allowance.Granter))
+	}
+
 	txf := tx.NewFactoryCLI(cc, &pflag.FlagSet{}).WithGasAdjustment(GAS_ADJUSTMENT)
 	gc, err := glib.NewClient(ctx, cc, txf)
 	if err != nil {
