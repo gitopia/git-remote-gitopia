@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/cosmos/cosmos-sdk v0.46.12
-	github.com/gitopia/gitopia-go v0.4.0
+	github.com/gitopia/gitopia-go v0.5.0
 	github.com/gitopia/gitopia/v2 v2.0.1
 	github.com/go-git/go-git/v5 v5.5.1
 	github.com/pkg/errors v0.9.1
@@ -176,5 +176,3 @@ require (
 replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 
 replace github.com/tendermint/tendermint => github.com/cometbft/cometbft v0.34.27
-
-replace github.com/gitopia/gitopia-go => /users/jananianbarasan/go/src/github.com/gitopia/gitopia-go
