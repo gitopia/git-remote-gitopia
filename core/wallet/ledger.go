@@ -30,12 +30,13 @@ import (
 )
 
 type Ledger struct {
-	privateKey cryptotypes.LedgerPrivKey
-	address    string
-	secType    secretType
+	privateKey     cryptotypes.LedgerPrivKey
+	address        string
+	secType        secretType
+	feeGranterAddr string
 }
 
-func InitLedgerWallet() (Wallet, error) {
+func InitLedgerWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
 	ledgerPrivKey, err := ledger.NewPrivKeySecp256k1Unsafe(hd.BIP44Params{
 		Purpose:      44,
 		CoinType:     118,
@@ -47,10 +48,23 @@ func InitLedgerWallet() (Wallet, error) {
 		return nil, errors.Wrap(err, "error generating ledger key")
 	}
 
+	addr := sdk.AccAddress(ledgerPrivKey.PubKey().Address()).String()
+
+	fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+		Granter: config.FeeGranterAddr,
+		Grantee: addr,
+	})
+
+	feeGranter := ""
+	if fr != nil {
+		feeGranter = fr.Allowance.Granter
+	}
+
 	return Ledger{
-		privateKey: ledgerPrivKey,
-		secType:    LEDGER,
-		address:    sdk.AccAddress(ledgerPrivKey.PubKey().Address()).String(),
+		privateKey:     ledgerPrivKey,
+		secType:        LEDGER,
+		address:        addr,
+		feeGranterAddr: feeGranter,
 	}, nil
 }
 
@@ -147,15 +161,8 @@ func (l Ledger) SignAndBroadcast(grpcConn *grpc.ClientConn, msgs []sdk.Msg) erro
 	}
 	txBuilder.SetFeeAmount(fee)
 
-	// check fee grant exists
-	fqc := feegrant.NewQueryClient(grpcConn)
-	fr, _ := fqc.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
-		Granter: config.FeeGranterAddr,
-		Grantee: l.Address(),
-	})
-
-	if fr != nil {
-		feeGranterAddr, err := sdk.AccAddressFromBech32(config.FeeGranterAddr)
+	if l.feeGranterAddr != "" {
+		feeGranterAddr, err := sdk.AccAddressFromBech32(l.feeGranterAddr)
 		if err != nil {
 			return err
 		}
