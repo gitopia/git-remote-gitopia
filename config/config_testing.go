@@ -9,4 +9,5 @@ const (
 	TmAddr         = "http://localhost:26657"
 	GasPrices      = "0.001ulore"
 	FeeGranterAddr = ""
+	Denom          = "ulore"
 )

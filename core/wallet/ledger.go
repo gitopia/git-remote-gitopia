@@ -21,6 +21,7 @@ import (
 	xauthsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtype "github.com/cosmos/cosmos-sdk/x/auth/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/gitopia/git-remote-gitopia/config"
 	gitopia "github.com/gitopia/gitopia/v2/app"
@@ -36,7 +37,7 @@ type Ledger struct {
 	feeGranterAddr string
 }
 
-func InitLedgerWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
+func InitLedgerWallet(bankClient banktypes.QueryClient, feegrantClient feegrant.QueryClient) (Wallet, error) {
 	ledgerPrivKey, err := ledger.NewPrivKeySecp256k1Unsafe(hd.BIP44Params{
 		Purpose:      44,
 		CoinType:     118,
@@ -50,14 +51,24 @@ func InitLedgerWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
 
 	addr := sdk.AccAddress(ledgerPrivKey.PubKey().Address()).String()
 
-	fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
-		Granter: config.FeeGranterAddr,
-		Grantee: addr,
-	})
-
 	feeGranter := ""
-	if fr != nil {
-		feeGranter = fr.Allowance.Granter
+	if bankClient != nil && feegrantClient != nil {
+		b, _ := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
+			Address: addr,
+			Denom:   config.Denom,
+		})
+
+		// Use fee grant only when balance is zero
+		if b.Balance.Amount.IsZero() {
+			fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+				Granter: config.FeeGranterAddr,
+				Grantee: addr,
+			})
+
+			if fr != nil {
+				feeGranter = fr.Allowance.Granter
+			}
+		}
 	}
 
 	return Ledger{

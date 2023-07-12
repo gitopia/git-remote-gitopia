@@ -51,7 +51,7 @@ func handleGetAction() {
 		return
 	}
 
-	wallet, err := wallet.InitWallet(nil)
+	wallet, err := wallet.InitWallet(nil, nil)
 	if err != nil {
 		log.Debugf(err.Error())
 		return
