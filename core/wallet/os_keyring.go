@@ -97,10 +97,13 @@ func InitOSKeyringWallet(bankClient banktypes.QueryClient, feegrantClient feegra
 	}
 
 	if bankClient != nil && feegrantClient != nil {
-		b, _ := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
+		b, err := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
 			Address: cc.FromAddress.String(),
 			Denom:   config.Denom,
 		})
+		if err != nil {
+			return nil, errors.New("error querying for balance")
+		}
 
 		// Use fee grant only when balance is zero
 		if b.Balance.Amount.IsZero() {
@@ -108,10 +111,11 @@ func InitOSKeyringWallet(bankClient banktypes.QueryClient, feegrantClient feegra
 				Granter: config.FeeGranterAddr,
 				Grantee: cc.FromAddress.String(),
 			})
-
-			if fr != nil {
-				cc.WithFeeGranterAddress(sdk.MustAccAddressFromBech32(fr.Allowance.Granter))
+			if fr == nil {
+				return nil, errors.New("no feegrant available")
 			}
+
+			cc = cc.WithFeeGranterAddress(sdk.MustAccAddressFromBech32(fr.Allowance.Granter))
 		}
 	}
 
