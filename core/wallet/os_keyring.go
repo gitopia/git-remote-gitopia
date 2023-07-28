@@ -13,6 +13,7 @@ import (
 	sdkkeyring "github.com/cosmos/cosmos-sdk/crypto/keyring"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/gitopia/git-remote-gitopia/config"
 	glib "github.com/gitopia/gitopia-go"
@@ -20,10 +21,9 @@ import (
 	gitopia "github.com/gitopia/gitopia/v2/app"
 	offchaintypes "github.com/gitopia/gitopia/v2/x/offchain/types"
 	goGitConfig "github.com/go-git/go-git/v5/config"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/pflag"
-
-	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
 
@@ -60,7 +60,7 @@ type OSKeyring struct {
 	secType secretType
 }
 
-func InitOSKeyringWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
+func InitOSKeyringWallet(bankClient banktypes.QueryClient, feegrantClient feegrant.QueryClient) (Wallet, error) {
 	var key string
 	var backend string
 
@@ -96,13 +96,23 @@ func InitOSKeyringWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
 		return nil, errors.Wrap(err, "error creating cosmos client context")
 	}
 
-	fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
-		Granter: config.FeeGranterAddr,
-		Grantee: cc.FromAddress.String(),
-	})
+	if bankClient != nil && feegrantClient != nil {
+		b, _ := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
+			Address: cc.FromAddress.String(),
+			Denom:   config.Denom,
+		})
 
-	if fr != nil {
-		cc.WithFeeGranterAddress(sdk.MustAccAddressFromBech32(fr.Allowance.Granter))
+		// Use fee grant only when balance is zero
+		if b.Balance.Amount.IsZero() {
+			fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+				Granter: config.FeeGranterAddr,
+				Grantee: cc.FromAddress.String(),
+			})
+
+			if fr != nil {
+				cc.WithFeeGranterAddress(sdk.MustAccAddressFromBech32(fr.Allowance.Granter))
+			}
+		}
 	}
 
 	txf := tx.NewFactoryCLI(cc, &pflag.FlagSet{}).WithGasAdjustment(GAS_ADJUSTMENT)

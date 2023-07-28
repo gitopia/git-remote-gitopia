@@ -9,4 +9,5 @@ const (
 	TmAddr         = "https://rpc.devnet.gitopia.com:443"
 	GasPrices      = "0.001ulore"
 	FeeGranterAddr = ""
+	Denom          = "ulore"
 )

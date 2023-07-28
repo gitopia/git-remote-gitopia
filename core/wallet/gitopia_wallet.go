@@ -21,6 +21,7 @@ import (
 	xauthsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtype "github.com/cosmos/cosmos-sdk/x/auth/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/gitopia/git-remote-gitopia/config"
 	gitopia "github.com/gitopia/gitopia/v2/app"
@@ -52,7 +53,7 @@ type GitopiaWallet struct {
 	feeGranterAddr string
 }
 
-func InitGitopiaWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
+func InitGitopiaWallet(bankClient banktypes.QueryClient, feegrantClient feegrant.QueryClient) (Wallet, error) {
 	var buffer []byte
 	var err error
 	gw := GitopiaWallet{}
@@ -85,13 +86,23 @@ func InitGitopiaWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
 	}
 	gw.address = sdk.AccAddress(gw.privateKey.PubKey().Address()).String()
 
-	fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
-		Granter: config.FeeGranterAddr,
-		Grantee: gw.address,
-	})
+	if bankClient != nil && feegrantClient != nil {
+		b, _ := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
+			Address: gw.address,
+			Denom:   config.Denom,
+		})
 
-	if fr != nil {
-		gw.feeGranterAddr = fr.Allowance.Granter
+		// Use fee grant only when balance is zero
+		if b.Balance.Amount.IsZero() {
+			fr, _ := feegrantClient.Allowance(context.Background(), &feegrant.QueryAllowanceRequest{
+				Granter: config.FeeGranterAddr,
+				Grantee: gw.address,
+			})
+
+			if fr != nil {
+				gw.feeGranterAddr = fr.Allowance.Granter
+			}
+		}
 	}
 
 	return gw, nil

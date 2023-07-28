@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"google.golang.org/grpc"
 )
@@ -27,12 +28,12 @@ type Wallet interface {
 }
 
 // TODO: make options optional
-func InitWallet(feegrantClient feegrant.QueryClient) (Wallet, error) {
-	wallet, err := InitOSKeyringWallet(feegrantClient)
+func InitWallet(bankClient banktypes.QueryClient, feegrantClient feegrant.QueryClient) (Wallet, error) {
+	wallet, err := InitOSKeyringWallet(bankClient, feegrantClient)
 	if errors.Is(err, ErrGitopiaKeyNotConfigured) {
-		wallet, err = InitGitopiaWallet(feegrantClient)
+		wallet, err = InitGitopiaWallet(bankClient, feegrantClient)
 		if err != nil {
-			wallet, err = InitLedgerWallet(feegrantClient)
+			wallet, err = InitLedgerWallet(bankClient, feegrantClient)
 			if err != nil {
 				return nil, fmt.Errorf("fatal: Gitopia wallet is not configured! Set gitopia key or use Ledger")
 			}
