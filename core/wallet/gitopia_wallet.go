@@ -87,10 +87,13 @@ func InitGitopiaWallet(bankClient banktypes.QueryClient, feegrantClient feegrant
 	gw.address = sdk.AccAddress(gw.privateKey.PubKey().Address()).String()
 
 	if bankClient != nil && feegrantClient != nil {
-		b, _ := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
+		b, err := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
 			Address: gw.address,
 			Denom:   config.Denom,
 		})
+		if err != nil {
+			return nil, errors.New("error querying for balance")
+		}
 
 		// Use fee grant only when balance is zero
 		if b.Balance.Amount.IsZero() {
@@ -98,10 +101,11 @@ func InitGitopiaWallet(bankClient banktypes.QueryClient, feegrantClient feegrant
 				Granter: config.FeeGranterAddr,
 				Grantee: gw.address,
 			})
-
-			if fr != nil {
-				gw.feeGranterAddr = fr.Allowance.Granter
+			if fr == nil {
+				return nil, errors.New("no feegrant available")
 			}
+
+			gw.feeGranterAddr = fr.Allowance.Granter
 		}
 	}
 

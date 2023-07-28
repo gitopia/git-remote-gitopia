@@ -53,10 +53,13 @@ func InitLedgerWallet(bankClient banktypes.QueryClient, feegrantClient feegrant.
 
 	feeGranter := ""
 	if bankClient != nil && feegrantClient != nil {
-		b, _ := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
+		b, err := bankClient.Balance(context.Background(), &banktypes.QueryBalanceRequest{
 			Address: addr,
 			Denom:   config.Denom,
 		})
+		if err != nil {
+			return nil, errors.New("error querying for balance")
+		}
 
 		// Use fee grant only when balance is zero
 		if b.Balance.Amount.IsZero() {
@@ -64,10 +67,11 @@ func InitLedgerWallet(bankClient banktypes.QueryClient, feegrantClient feegrant.
 				Granter: config.FeeGranterAddr,
 				Grantee: addr,
 			})
-
-			if fr != nil {
-				feeGranter = fr.Allowance.Granter
+			if fr == nil {
+				return nil, errors.New("no feegrant available")
 			}
+
+			feeGranter = fr.Allowance.Granter
 		}
 	}
 
