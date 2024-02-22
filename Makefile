@@ -27,7 +27,7 @@ endif
 
 build_tags += $(BUILD_TAGS)
 build_tags := $(strip $(build_tags))
-BUILD_FLAGS := -tags "$(build_tags) $(GITOPIA_ENV)"
+BUILD_FLAGS := -tags "$(build_tags) $(GITOPIA_ENV)" -ldflags="-s -w"
 
 appname := git-remote-gitopia
 version := $(shell echo $(shell git describe --tags) | sed 's/^v//')
