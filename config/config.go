@@ -1,55 +1,49 @@
 package config
 
 import (
-	"cosmossdk.io/errors"
-	goGitConfig "github.com/go-git/go-git/v5/config"
+	"fmt"
+	"os/exec"
+	"strings"
 )
 
 const (
 	AppName              = "git-remote-gitopia"
 	gitopiaConfigSection = "gitopia"
-
-	gitopiaConfigChainid       = "chainid"
-	gitopiaConfigGrpchost      = "grpchost"
-	gitopiaConfigGitserverhost = "gitserverhost"
-	gitopiaConfigTmaddr        = "tmaddr"
-	gitopiaConfigGasprices     = "gasprices"
-	gitopiaConfigFeegranter    = "feegranter"
-	gitopiaConfigDenom         = "denom"
 )
 
-func LoadGitConfig() error {
-	conf, err := goGitConfig.LoadConfig(goGitConfig.GlobalScope)
+func gitConfigGet(key string) (string, error) {
+	cmd := exec.Command("git", "config", "--get", fmt.Sprintf("gitopia.%s", key))
+	stdout, err := cmd.Output()
+
 	if err != nil {
-		return errors.Wrap(err, "error loading git config")
+		return "", err
 	}
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigChainid) {
-		ChainId = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigChainid)
+
+	res := strings.TrimSpace(string(stdout))
+	return res, nil
+}
+
+func LoadGitConfig() error {
+	if res, err := gitConfigGet("chainId"); err == nil {
+		ChainId = res
 	}
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigGrpchost) {
-		GRPCHost = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigGrpchost)
+	if res, err := gitConfigGet("grpcHost"); err == nil {
+		GRPCHost = res
 	}
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigGitserverhost) {
-		GitServerHost = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigGitserverhost)
+	if res, err := gitConfigGet("gitServerHost"); err == nil {
+		GitServerHost = res
 	}
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigTmaddr) {
-		TmAddr = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigTmaddr)
+	if res, err := gitConfigGet("tmAddr"); err == nil {
+		TmAddr = res
 	}
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigGasprices) {
-		GasPrices = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigGasprices)
+	if res, err := gitConfigGet("gasPrices"); err == nil {
+		GasPrices = res
 	}
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigFeegranter) {
-		FeeGranterAddr = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigFeegranter)
+	if res, err := gitConfigGet("feeGranter"); err == nil {
+		FeeGranterAddr = res
 	}
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigDenom) {
-		Denom = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigDenom)
+	if res, err := gitConfigGet("denom"); err == nil {
+		Denom = res
 	}
 	return nil
 }
