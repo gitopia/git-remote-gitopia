@@ -49,6 +49,30 @@ For pushing git repositories to gitopia, you would require a gitopia wallet with
 export GITOPIA_WALLET=/path/to/wallet.json
 ```
 
+## Custom Endpoint Configuration Example
+
+### Testnet
+```
+git config --global gitopia.chainId "gitopia"
+git config --global gitopia.grpcHost "localhost:9090"
+git config --global gitopia.gitServerhHst "http://localhost:5001"
+git config --global gitopia.tmAddr "http://localhost:26657"
+git config --global gitopia.gasPrices "0.001ulore"
+git config --global gitopia.feeGranter ""
+git config --global gitopia.denom "ulore"
+```
+
+### Mainnet
+```
+git config --global gitopia.chainId "gitopia"
+git config --global gitopia.grpcHost "grpc.gitopia.com:9090"
+git config --global gitopia.gitServerHost "https://server.gitopia.com"
+git config --global gitopia.tmAddr "https://rpc.gitopia.com:443"
+git config --global gitopia.gasPrices "0.001ulore"
+git config --global gitopia.feeGranter "gitopia13ashgc6j5xle4m47kqyn5psavq0u3klmscfxql"
+git config --global gitopia.denom "ulore"
+```
+
 ## Troubleshooting
 
 If you encounter the following error after installation, make sure to add `$GOBIN` to your `$PATH`

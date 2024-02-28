@@ -2,7 +2,7 @@
 
 package config
 
-const (
+var (
 	ChainId        = "gitopia"
 	GRPCHost       = "grpc.gitopia.com:9090"
 	GitServerHost  = "https://server.gitopia.com"

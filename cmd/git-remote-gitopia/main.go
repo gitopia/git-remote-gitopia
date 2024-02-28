@@ -7,10 +7,13 @@ import (
 	"os"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
 )
 
 func Main(args []string, reader io.Reader, writer io.Writer, logger *log.Logger) error {
+	config.LoadGitConfig()
+
 	conf := sdk.GetConfig()
 	conf.SetBech32PrefixForAccount(AccountAddressPrefix, AccountPubKeyPrefix)
 	// cannot seal the config
