@@ -2,6 +2,12 @@
 
 All notable changes will be documented here.
 
+## [v1.8.0] - 2024-05-31
+
+- Support custom configuration for api and other parameters
+- Reduce the size of release binaries
+- Fix ledger wallet auth
+
 ## [v1.7.0] - 2023-07-29
 
 - Command to initialize lfs config
