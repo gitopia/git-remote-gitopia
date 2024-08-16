@@ -13,7 +13,7 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/gitopia/git-remote-gitopia/config"
 	"github.com/gitopia/git-remote-gitopia/core"
-	gitopiatypes "github.com/gitopia/gitopia/v2/x/gitopia/types"
+	gitopiatypes "github.com/gitopia/gitopia/v4/x/gitopia/types"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"

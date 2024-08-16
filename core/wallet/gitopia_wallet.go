@@ -24,8 +24,8 @@ import (
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/gitopia/git-remote-gitopia/config"
-	gitopia "github.com/gitopia/gitopia/v2/app"
-	offchaintypes "github.com/gitopia/gitopia/v2/x/offchain/types"
+	gitopia "github.com/gitopia/gitopia/v4/app"
+	offchaintypes "github.com/gitopia/gitopia/v4/x/offchain/types"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )

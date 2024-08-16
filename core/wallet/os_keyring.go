@@ -18,8 +18,8 @@ import (
 	"github.com/gitopia/git-remote-gitopia/config"
 	glib "github.com/gitopia/gitopia-go"
 	"github.com/gitopia/gitopia-go/logger"
-	gitopia "github.com/gitopia/gitopia/v2/app"
-	offchaintypes "github.com/gitopia/gitopia/v2/x/offchain/types"
+	gitopia "github.com/gitopia/gitopia/v4/app"
+	offchaintypes "github.com/gitopia/gitopia/v4/x/offchain/types"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -119,7 +119,13 @@ func InitOSKeyringWallet(bankClient banktypes.QueryClient, feegrantClient feegra
 		}
 	}
 
-	txf := tx.NewFactoryCLI(cc, &pflag.FlagSet{}).WithGasAdjustment(GAS_ADJUSTMENT)
+	txf, err := tx.NewFactoryCLI(cc, &pflag.FlagSet{})
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating tx factory")
+	}
+
+	txf = txf.WithGasAdjustment(GAS_ADJUSTMENT)
+
 	gc, err := glib.NewClient(ctx, cc, txf)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating cosmos client")
