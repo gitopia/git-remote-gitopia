@@ -338,6 +338,10 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		}, deleteTags))
 	}
 
+	if h.wallet.Type() == wallet.LEDGER {
+		remote.Logger.Println("Please sign the gitopia transaction on your ledger device.")
+	}
+
 	if err := h.wallet.SignAndBroadcast(h.grpcConn, msg); err != nil {
 		return nil, err
 	}
