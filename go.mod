@@ -4,8 +4,8 @@ go 1.21
 
 require (
 	github.com/cosmos/cosmos-sdk v0.47.13
-	github.com/gitopia/gitopia-go v0.6.0-rc.2
-	github.com/gitopia/gitopia/v4 v4.0.0-rc.5
+	github.com/gitopia/gitopia-go v0.6.0
+	github.com/gitopia/gitopia/v4 v4.0.0
 	github.com/go-git/go-git/v5 v5.11.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
