@@ -13,6 +13,7 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/gitopia/git-remote-gitopia/config"
 	"github.com/gitopia/git-remote-gitopia/core"
+	"github.com/gitopia/git-remote-gitopia/core/api"
 	gitopiatypes "github.com/gitopia/gitopia/v4/x/gitopia/types"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -51,7 +52,15 @@ func InitCommand() *cobra.Command {
 
 			interfaceRegistry := codectypes.NewInterfaceRegistry()
 
-			grpcConn, err := grpc.Dial(config.GRPCHost,
+			grpcHost, _ := config.GitConfigGet(config.GitopiaConfigGRPCHostOption)
+			if grpcHost == "" || !api.CheckGRPCHostLiveness(grpcHost) {
+				provider := api.GetBestApiProvider()
+				if err := api.SetConfiguredGRPCHost(provider.GRPCHost); err != nil {
+					return err
+				}
+			}
+
+			grpcConn, err := grpc.Dial(grpcHost,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(interfaceRegistry).GRPCCodec())),
 			)

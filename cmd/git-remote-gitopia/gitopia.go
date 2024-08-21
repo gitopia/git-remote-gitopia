@@ -55,10 +55,15 @@ type GitopiaHandler struct {
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	var err error
 
-	grpcHost := api.GetConfiguredGRPCHost()
-	if grpcHost == "" || !api.CheckLiveness(grpcHost) {
-		grpcHost = api.GetBestGRPCHost()
-		if err := api.SetConfiguredGRPCHost(grpcHost); err != nil {
+	grpcHost, _ := config.GitConfigGet(config.GitopiaConfigGRPCHostOption)
+	tmAddr, _ := config.GitConfigGet(config.GitopiaConfigTmAddrOption)
+	if grpcHost == "" || tmAddr == "" || !api.CheckGRPCHostLiveness(grpcHost) || !api.CheckRPCHostLiveness(tmAddr) {
+		provider := api.GetBestApiProvider()
+		grpcHost = provider.GRPCHost
+		if err := api.SetConfiguredGRPCHost(provider.GRPCHost); err != nil {
+			return err
+		}
+		if err := api.SetConfiguredTmAddr(provider.TMAddr); err != nil {
 			return err
 		}
 	}
