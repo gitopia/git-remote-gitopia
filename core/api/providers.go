@@ -24,7 +24,7 @@ var providers = []ProviderConfig{
 	},
 	{
 		GRPCHost: "gitopia-rpc.stakeangle.com:41390",
-		TMAddr:   "https://gitopia-rpc.stakeangle.com",
+		TMAddr:   "https://gitopia-rpc.stakeangle.com:443",
 	},
 }
 
