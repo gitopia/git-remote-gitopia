@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	GAS_ADJUSTMENT = 1.5
+	GAS_ADJUSTMENT = 1.8
 )
 
 func calculateGas(cc *grpc.ClientConn, txClient tx.ServiceClient, txCfg client.TxConfig, txBuilder client.TxBuilder) (uint64, error) {

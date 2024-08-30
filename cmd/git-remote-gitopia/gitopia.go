@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
-	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -19,9 +18,10 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/feegrant"
 	"github.com/gitopia/git-remote-gitopia/config"
 	core "github.com/gitopia/git-remote-gitopia/core"
+	"github.com/gitopia/git-remote-gitopia/core/api"
 	"github.com/gitopia/git-remote-gitopia/core/wallet"
-	gitopiatypes "github.com/gitopia/gitopia/v2/x/gitopia/types"
-	"github.com/gitopia/gitopia/v2/x/gitopia/utils"
+	gitopiatypes "github.com/gitopia/gitopia/v4/x/gitopia/types"
+	"github.com/gitopia/gitopia/v4/x/gitopia/utils"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -55,32 +55,39 @@ type GitopiaHandler struct {
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	var err error
 
-	interfaceRegistry := codectypes.NewInterfaceRegistry()
-	authtypes.RegisterInterfaces(interfaceRegistry)
-	cryptocodec.RegisterInterfaces(interfaceRegistry)
+	grpcHost, _ := config.GitConfigGet(config.GitopiaConfigGRPCHostOption)
+	tmAddr, _ := config.GitConfigGet(config.GitopiaConfigTmAddrOption)
+	if grpcHost == "" || tmAddr == "" || !api.CheckGRPCHostLiveness(grpcHost) || !api.CheckRPCHostLiveness(tmAddr) {
+		provider := api.GetBestApiProvider()
+		grpcHost = provider.GRPCHost
+		if err := api.SetConfiguredGRPCHost(provider.GRPCHost); err != nil {
+			return err
+		}
+		if err := api.SetConfiguredTmAddr(provider.TMAddr); err != nil {
+			return err
+		}
+	}
 
-	h.grpcConn, err = grpc.Dial(config.GRPCHost,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithDefaultCallOptions(grpc.ForceCodec(codec.NewProtoCodec(interfaceRegistry).GRPCCodec())),
-	)
+	h.grpcConn, err = grpc.Dial(grpcHost, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
-	// defer grpcConn.Close()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	authtypes.RegisterInterfaces(interfaceRegistry)
+	cryptocodec.RegisterInterfaces(interfaceRegistry)
 
 	h.queryClient = gitopiatypes.NewQueryClient(h.grpcConn)
 	serviceClient := tmservice.NewServiceClient(h.grpcConn)
 	h.feegrantClient = feegrant.NewQueryClient(h.grpcConn)
 	h.bankClient = banktypes.NewQueryClient(h.grpcConn)
 
-	// Get chain id for signing transaction
 	nodeInfoRes, err := serviceClient.GetNodeInfo(context.Background(), &tmservice.GetNodeInfoRequest{})
 	if err != nil {
 		return err
 	}
 	h.chainId = nodeInfoRes.DefaultNodeInfo.Network
 
-	// Get RepositoryId
 	res, err := h.queryClient.AnyRepository(context.Background(), &gitopiatypes.QueryGetAnyRepositoryRequest{
 		Id:             h.remoteUserId,
 		RepositoryName: h.remoteRepositoryName,
@@ -334,6 +341,10 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			Id:   h.remoteRepository.Owner.Id,
 			Name: h.remoteRepository.Name,
 		}, deleteTags))
+	}
+
+	if h.wallet.Type() == wallet.LEDGER {
+		remote.Logger.Println("Please sign the gitopia transaction on your ledger device.")
 	}
 
 	if err := h.wallet.SignAndBroadcast(h.grpcConn, msg); err != nil {

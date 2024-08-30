@@ -2,6 +2,12 @@
 
 All notable changes will be documented here.
 
+## [v1.9.0] - 2024-08-20
+
+- upgrade cosmos-sdk to v0.47.13, gitopia to v4.0.0 and gitopia-go to v0.6.0
+- automatic selection of grpc host with the least latency
+- set gas adjustment to 1.8
+
 ## [v1.8.0] - 2024-05-31
 
 - Support custom configuration for api and other parameters

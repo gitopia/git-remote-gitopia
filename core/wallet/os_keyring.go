@@ -18,8 +18,8 @@ import (
 	"github.com/gitopia/git-remote-gitopia/config"
 	glib "github.com/gitopia/gitopia-go"
 	"github.com/gitopia/gitopia-go/logger"
-	gitopia "github.com/gitopia/gitopia/v2/app"
-	offchaintypes "github.com/gitopia/gitopia/v2/x/offchain/types"
+	gitopia "github.com/gitopia/gitopia/v4/app"
+	offchaintypes "github.com/gitopia/gitopia/v4/x/offchain/types"
 	goGitConfig "github.com/go-git/go-git/v5/config"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -28,11 +28,8 @@ import (
 )
 
 const (
-	AppName                    = "git-remote-gitopia"
-	AccountAddressPrefix       = "gitopia"
-	gitopiaConfigSection       = "gitopia"
-	gitopiaConfigKeyOption     = "key"
-	gitopiaConfigBackendOption = "backend"
+	AppName              = "git-remote-gitopia"
+	AccountAddressPrefix = "gitopia"
 )
 
 var (
@@ -68,18 +65,27 @@ func InitOSKeyringWallet(bankClient banktypes.QueryClient, feegrantClient feegra
 	if err != nil {
 		return nil, errors.Wrap(err, "error loading git config")
 	}
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigKeyOption) {
-		key = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigKeyOption)
+	if conf.Raw.HasSection(config.GitopiaConfigSection) &&
+		conf.Raw.Section(config.GitopiaConfigSection).HasOption(config.GitopiaConfigKeyOption) {
+		key = conf.Raw.Section(config.GitopiaConfigSection).Option(config.GitopiaConfigKeyOption)
 	} else {
 		return nil, ErrGitopiaKeyNotConfigured
 	}
 
-	if conf.Raw.HasSection(gitopiaConfigSection) &&
-		conf.Raw.Section(gitopiaConfigSection).HasOption(gitopiaConfigBackendOption) {
-		backend = conf.Raw.Section(gitopiaConfigSection).Option(gitopiaConfigBackendOption)
+	if conf.Raw.HasSection(config.GitopiaConfigSection) &&
+		conf.Raw.Section(config.GitopiaConfigSection).HasOption(config.GitopiaConfigBackendOption) {
+		backend = conf.Raw.Section(config.GitopiaConfigSection).Option(config.GitopiaConfigBackendOption)
 	} else {
 		backend = keyring.BackendOS // default to OS. same as cosmos keys subcommand
+	}
+
+	grpcHost, err := config.GitConfigGet(config.GitopiaConfigGRPCHostOption)
+	if err != nil {
+		return nil, err
+	}
+	tmAddr, err := config.GitConfigGet(config.GitopiaConfigTmAddrOption)
+	if err != nil {
+		return nil, err
 	}
 
 	l := logrus.New()
@@ -87,9 +93,9 @@ func InitOSKeyringWallet(bankClient banktypes.QueryClient, feegrantClient feegra
 	ctx := logger.ContextWithValue(context.Background(), l)
 	glib.WithAppName(AppName)
 	glib.WithGasPrices(config.GasPrices)
-	glib.WithGitopiaAddr(config.GRPCHost)
+	glib.WithGitopiaAddr(grpcHost)
 	glib.WithChainId(config.ChainId)
-	glib.WithTmAddr(config.TmAddr)
+	glib.WithTmAddr(tmAddr)
 
 	cc, err := glib.GetClientContextWithOptions(AppName, backend, key)
 	if err != nil {
@@ -119,7 +125,13 @@ func InitOSKeyringWallet(bankClient banktypes.QueryClient, feegrantClient feegra
 		}
 	}
 
-	txf := tx.NewFactoryCLI(cc, &pflag.FlagSet{}).WithGasAdjustment(GAS_ADJUSTMENT)
+	txf, err := tx.NewFactoryCLI(cc, &pflag.FlagSet{})
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating tx factory")
+	}
+
+	txf = txf.WithGasAdjustment(GAS_ADJUSTMENT)
+
 	gc, err := glib.NewClient(ctx, cc, txf)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating cosmos client")
