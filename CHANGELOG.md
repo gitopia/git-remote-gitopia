@@ -6,6 +6,7 @@ All notable changes will be documented here.
 
 - fix offchain proto warning
 - remove websocket connection with rpc servers
+- check sync status in rpc provider liveness test
 
 ## [v1.9.0] - 2024-08-20
 

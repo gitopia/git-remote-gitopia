@@ -18,8 +18,16 @@ func CheckGRPCHostLiveness(host string) bool {
 	defer conn.Close()
 
 	client := tmservice.NewServiceClient(conn)
-	_, err = client.GetNodeInfo(context.Background(), &tmservice.GetNodeInfoRequest{})
-	return err == nil
+	res, err := client.GetSyncing(context.Background(), &tmservice.GetSyncingRequest{})
+	if err != nil {
+		return false
+	}
+
+	if res.Syncing {
+		return false
+	}
+
+	return true
 }
 
 func checkGRPCHostLatency(host string) time.Duration {
