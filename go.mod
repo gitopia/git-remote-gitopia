@@ -5,7 +5,7 @@ go 1.21
 require (
 	github.com/cometbft/cometbft v0.37.6
 	github.com/cosmos/cosmos-sdk v0.47.13
-	github.com/gitopia/gitopia-go v0.6.0
+	github.com/gitopia/gitopia-go v0.6.1
 	github.com/gitopia/gitopia/v4 v4.0.1
 	github.com/go-git/go-git/v5 v5.11.0
 	github.com/pkg/errors v0.9.1
