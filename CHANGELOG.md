@@ -2,6 +2,11 @@
 
 All notable changes will be documented here.
 
+## [v1.9.1] - 2024-08-31
+
+- fix offchain proto warning
+- remove websocket connection with rpc servers
+
 ## [v1.9.0] - 2024-08-20
 
 - upgrade cosmos-sdk to v0.47.13, gitopia to v4.0.0 and gitopia-go to v0.6.0

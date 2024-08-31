@@ -3,9 +3,10 @@ module github.com/gitopia/git-remote-gitopia
 go 1.21
 
 require (
+	github.com/cometbft/cometbft v0.37.6
 	github.com/cosmos/cosmos-sdk v0.47.13
-	github.com/gitopia/gitopia-go v0.6.0
-	github.com/gitopia/gitopia/v4 v4.0.0
+	github.com/gitopia/gitopia-go v0.6.1
+	github.com/gitopia/gitopia/v4 v4.0.1
 	github.com/go-git/go-git/v5 v5.11.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
@@ -52,7 +53,6 @@ require (
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
 	github.com/coinbase/rosetta-sdk-go/types v1.0.0 // indirect
-	github.com/cometbft/cometbft v0.37.6 // indirect
 	github.com/cometbft/cometbft-db v0.11.0 // indirect
 	github.com/confio/ics23/go v0.9.0 // indirect
 	github.com/cosmos/btcutil v1.0.5 // indirect
