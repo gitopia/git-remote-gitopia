@@ -55,7 +55,7 @@ export GITOPIA_WALLET=/path/to/wallet.json
 ```
 git config --global gitopia.chainId "gitopia"
 git config --global gitopia.grpcHost "localhost:9090"
-git config --global gitopia.gitServerhHst "http://localhost:5001"
+git config --global gitopia.gitServerHost "http://localhost:5001"
 git config --global gitopia.tmAddr "http://localhost:26657"
 git config --global gitopia.gasPrices "0.001ulore"
 git config --global gitopia.feeGranter ""

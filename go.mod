@@ -5,8 +5,8 @@ go 1.21
 require (
 	github.com/cometbft/cometbft v0.37.6
 	github.com/cosmos/cosmos-sdk v0.47.13
-	github.com/gitopia/gitopia-go v0.6.1
-	github.com/gitopia/gitopia/v4 v4.0.1
+	github.com/gitopia/gitopia-go v0.6.2
+	github.com/gitopia/gitopia/v5 v5.1.0
 	github.com/go-git/go-git/v5 v5.11.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.9.3
@@ -218,3 +218,5 @@ require (
 
 // https://github.com/cosmos/cosmos-sdk/issues/20159
 replace golang.org/x/exp => golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
+
+replace github.com/gitopia/gitopia/v4 => ../gitopia

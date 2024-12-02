@@ -2,6 +2,12 @@
 
 All notable changes will be documented here.
 
+## [v1.10.0] - 2024-12-02
+
+- upgrade gitopia version to v5.1.0
+- upgrade gitopia-go version to v0.6.2
+- update the push permissions logic for dao repositories
+
 ## [v1.9.1] - 2024-08-31
 
 - fix offchain proto warning
