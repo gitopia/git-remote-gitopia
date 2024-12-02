@@ -20,8 +20,8 @@ import (
 	core "github.com/gitopia/git-remote-gitopia/core"
 	"github.com/gitopia/git-remote-gitopia/core/api"
 	"github.com/gitopia/git-remote-gitopia/core/wallet"
-	gitopiatypes "github.com/gitopia/gitopia/v4/x/gitopia/types"
-	"github.com/gitopia/gitopia/v4/x/gitopia/utils"
+	gitopiatypes "github.com/gitopia/gitopia/v5/x/gitopia/types"
+	"github.com/gitopia/gitopia/v5/x/gitopia/utils"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -360,15 +360,18 @@ func (h *GitopiaHandler) havePushPermission(walletAddress string) (havePermissio
 			havePermission = true
 		}
 	} else if h.remoteRepository.Owner.Type == gitopiatypes.OwnerType_DAO {
-		member, err := h.queryClient.DaoMember(context.Background(), &gitopiatypes.QueryGetDaoMemberRequest{
-			DaoId:  h.remoteRepository.Owner.Id,
-			UserId: h.wallet.Address(),
+		resp, err := h.queryClient.DaoMemberAll(context.Background(), &gitopiatypes.QueryAllDaoMemberRequest{
+			DaoId: h.remoteRepository.Owner.Id,
 		})
 		if err != nil {
 			return havePermission, err
 		}
-		if member.Member.Role == gitopiatypes.MemberRole_OWNER {
-			havePermission = true
+
+		for _, member := range resp.Members {
+			if member.Member.Address == walletAddress {
+				havePermission = true
+				break
+			}
 		}
 	}
 
