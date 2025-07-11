@@ -59,6 +59,15 @@ func InitCommand() *cobra.Command {
 					return err
 				}
 			}
+			gitServerHost, _ := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
+			if gitServerHost == "" {
+				gitServerHost = api.GetBestGitServerHost(grpcHost)
+				if gitServerHost != "" {
+					if err := api.SetConfiguredGitServerHost(gitServerHost); err != nil {
+						return err
+					}
+				}
+			}
 
 			grpcConn, err := grpc.Dial(grpcHost,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -81,7 +90,11 @@ func InitCommand() *cobra.Command {
 			}
 
 			remoteRepository := *res.Repository
-			lfsURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, remoteRepository.Id)
+			gitServerHost, _ = config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
+			if gitServerHost == "" {
+				gitServerHost = config.GitServerHost
+			}
+			lfsURL := fmt.Sprintf("%v/%v.git", gitServerHost, remoteRepository.Id)
 
 			c = core.GitCommand("git", "config",
 				fmt.Sprintf("--file=%s", lfsConfigPath),

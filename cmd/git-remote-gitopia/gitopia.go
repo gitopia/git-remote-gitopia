@@ -68,6 +68,16 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 		}
 	}
 
+	gitServerHost, _ := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
+	if gitServerHost == "" {
+		gitServerHost = api.GetBestGitServerHost(grpcHost)
+		if gitServerHost != "" {
+			if err := api.SetConfiguredGitServerHost(gitServerHost); err != nil {
+				return err
+			}
+		}
+	}
+
 	h.grpcConn, err = grpc.Dial(grpcHost, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -138,7 +148,11 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 }
 
 func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetch) error {
-	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
+	gitServerHost, _ := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
+	if gitServerHost == "" {
+		gitServerHost = config.GitServerHost
+	}
+	remoteURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
 
 	if !remote.Force {
 		args := []string{
@@ -214,7 +228,11 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, fmt.Errorf("fatal: you don't have write permissions to this repository")
 	}
 
-	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
+	gitServerHost, _ := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
+	if gitServerHost == "" {
+		gitServerHost = config.GitServerHost
+	}
+	remoteURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
 
 	var newRemoteRefSha string
 	var setBranches []gitopiatypes.MsgMultiSetBranch_Branch
