@@ -20,8 +20,8 @@ import (
 	core "github.com/gitopia/git-remote-gitopia/core"
 	"github.com/gitopia/git-remote-gitopia/core/api"
 	"github.com/gitopia/git-remote-gitopia/core/wallet"
-	gitopiatypes "github.com/gitopia/gitopia/v5/x/gitopia/types"
-	"github.com/gitopia/gitopia/v5/x/gitopia/utils"
+	gitopiatypes "github.com/gitopia/gitopia/v6/x/gitopia/types"
+	"github.com/gitopia/gitopia/v6/x/gitopia/utils"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -93,7 +93,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 		RepositoryName: h.remoteRepositoryName,
 	})
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("error getting repository %s/%s", h.remoteUserId, h.remoteRepositoryName))
 	}
 
 	h.remoteRepository = *res.Repository
