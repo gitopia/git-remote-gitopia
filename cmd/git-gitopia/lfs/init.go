@@ -60,7 +60,7 @@ func InitCommand() *cobra.Command {
 				}
 			}
 			gitServerHost, _ := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
-			if gitServerHost == "" {
+			if gitServerHost == "" || !api.CheckGitServerHostLiveness(gitServerHost) {
 				gitServerHost = api.GetBestGitServerHost(grpcHost)
 				if gitServerHost != "" {
 					if err := api.SetConfiguredGitServerHost(gitServerHost); err != nil {
@@ -90,10 +90,6 @@ func InitCommand() *cobra.Command {
 			}
 
 			remoteRepository := *res.Repository
-			gitServerHost, _ = config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
-			if gitServerHost == "" {
-				gitServerHost = config.GitServerHost
-			}
 			lfsURL := fmt.Sprintf("%v/%v.git", gitServerHost, remoteRepository.Id)
 
 			c = core.GitCommand("git", "config",

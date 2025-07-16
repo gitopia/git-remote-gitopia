@@ -7,6 +7,16 @@ import (
 	"github.com/gitopia/git-remote-gitopia/core"
 )
 
+func CheckGitServerHostLiveness(host string) bool {
+	res, err := http.Get(host + "/healthz")
+	if err != nil {
+		return false
+	}
+	defer res.Body.Close()
+
+	return res.StatusCode == http.StatusOK
+}
+
 func checkHttpHostLatency(host string) time.Duration {
 	start := time.Now()
 	_, err := http.Get(host)
