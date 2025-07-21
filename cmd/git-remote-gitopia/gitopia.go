@@ -153,9 +153,11 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 		return err
 	}
 	remoteURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
+	lfsURL := remoteURL // Use same URL for LFS
 
 	if !remote.Force {
 		args := []string{
+			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
 			"fetch",
 			"--no-write-fetch-head",
 			remoteURL,
@@ -179,6 +181,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 		}
 
 		args := []string{
+			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
 			"fetch",
 			"--no-write-fetch-head",
 			remoteURL,
@@ -233,6 +236,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, err
 	}
 	remoteURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
+	lfsURL := remoteURL // Use same URL for LFS
 
 	var newRemoteRefSha string
 	var setBranches []gitopiatypes.MsgMultiSetBranch_Branch
@@ -285,6 +289,8 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			"credential.helper=",
 			"-c",
 			"credential.helper=gitopia",
+			"-c",
+			fmt.Sprintf("lfs.url=%s", lfsURL),
 			"push",
 			remoteURL,
 			fmt.Sprintf("%s:%s", ref.Local, ref.Remote),
