@@ -78,6 +78,10 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 		}
 	}
 
+	remote.Logger.Printf("grpc host: %s", grpcHost)
+	remote.Logger.Printf("rpc host: %s", tmAddr)
+	remote.Logger.Printf("git server host: %s", gitServerHost)
+
 	h.grpcConn, err = grpc.Dial(grpcHost, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
@@ -107,6 +111,14 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	}
 
 	h.remoteRepository = *res.Repository
+
+	// Configure LFS URL for clone operations to avoid SSH to non-existent "gitopia" hostname
+	lfsURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
+	cmd := core.GitCommand("git", "config", "--local", "lfs.url", lfsURL)
+	if err := cmd.Run(); err != nil {
+		// Log but don't fail if LFS config fails (repo might not have LFS)
+		remote.Logger.Printf("Warning: could not configure LFS URL: %v", err)
+	}
 
 	return nil
 }
