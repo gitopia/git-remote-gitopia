@@ -32,7 +32,8 @@ func GetLocalDir() (string, error) {
 func GitCommand(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
 	cmd.Env = os.Environ()
-	cmd.Stdout = os.Stdout
+	// Redirect stdout to stderr to avoid protocol communication issues
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 
 	return cmd

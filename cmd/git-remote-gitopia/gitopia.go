@@ -58,23 +58,23 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	// Check existing configuration
 	grpcHost, _ := config.GitConfigGet(config.GitopiaConfigGRPCHostOption)
 	tmAddr, _ := config.GitConfigGet(config.GitopiaConfigTmAddrOption)
-	
+
 	// Validate and configure gRPC and RPC hosts
 	needsReconfiguration := false
 	if grpcHost == "" || tmAddr == "" || !api.CheckGRPCHostLiveness(grpcHost) || !api.CheckRPCHostLiveness(tmAddr) {
 		needsReconfiguration = true
 	}
-	
+
 	if needsReconfiguration {
 		remote.Logger.Printf("Configuring Gitopia hosts...")
 		provider := api.GetBestApiProvider()
 		grpcHost = provider.GRPCHost
 		tmAddr = provider.TMAddr
-		
+
 		if err := api.SetConfiguredGRPCHost(provider.GRPCHost); err != nil {
 			return err
 		}
-		
+
 		if err := api.SetConfiguredTmAddr(provider.TMAddr); err != nil {
 			return err
 		}
@@ -82,7 +82,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	// Check and configure Git server host
 	gitServerHost, _ := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
-	
+
 	if gitServerHost == "" || !api.CheckGitServerHostLiveness(gitServerHost) {
 		gitServerHost = api.GetBestGitServerHost(grpcHost)
 		if gitServerHost != "" {
