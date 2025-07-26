@@ -22,6 +22,7 @@ import (
 	"github.com/gitopia/git-remote-gitopia/core/wallet"
 	gitopiatypes "github.com/gitopia/gitopia/v6/x/gitopia/types"
 	"github.com/gitopia/gitopia/v6/x/gitopia/utils"
+	storagetypes "github.com/gitopia/gitopia/v6/x/storage/types"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -41,6 +42,7 @@ type GitopiaHandler struct {
 	queryClient    gitopiatypes.QueryClient
 	feegrantClient feegrant.QueryClient
 	bankClient     banktypes.QueryClient
+	storageClient  storagetypes.QueryClient
 
 	chainId              string
 	remoteUserId         string
@@ -105,6 +107,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	serviceClient := tmservice.NewServiceClient(h.grpcConn)
 	h.feegrantClient = feegrant.NewQueryClient(h.grpcConn)
 	h.bankClient = banktypes.NewQueryClient(h.grpcConn)
+	h.storageClient = storagetypes.NewQueryClient(h.grpcConn)
 
 	nodeInfoRes, err := serviceClient.GetNodeInfo(context.Background(), &tmservice.GetNodeInfoRequest{})
 	if err != nil {
@@ -362,19 +365,25 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		}
 	}
 
-	var msg []sdk.Msg
+	packfileRes, err := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
+		RepositoryId: h.remoteRepository.Id,
+	})
+	if err != nil {
+		return nil, err
+	}
 
+	var msg []sdk.Msg
 	if len(setBranches) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiSetBranch(h.wallet.Address(), gitopiatypes.RepositoryId{
 			Id:   h.remoteRepository.Owner.Id,
 			Name: h.remoteRepository.Name,
-		}, setBranches))
+		}, setBranches, packfileRes.Packfile.Cid))
 	}
 	if len(setTags) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiSetTag(h.wallet.Address(), gitopiatypes.RepositoryId{
 			Id:   h.remoteRepository.Owner.Id,
 			Name: h.remoteRepository.Name,
-		}, setTags))
+		}, setTags, packfileRes.Packfile.Cid))
 	}
 	if len(deleteBranches) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiDeleteBranch(h.wallet.Address(), gitopiatypes.RepositoryId{
