@@ -365,22 +365,26 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		}
 	}
 
-	packfileRes, _ := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
+	var packfileCid string
+	packfileRes, err := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
 		RepositoryId: h.remoteRepository.Id,
 	})
+	if err == nil {
+		packfileCid = packfileRes.Packfile.Cid
+	}
 
 	var msg []sdk.Msg
 	if len(setBranches) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiSetBranch(h.wallet.Address(), gitopiatypes.RepositoryId{
 			Id:   h.remoteRepository.Owner.Id,
 			Name: h.remoteRepository.Name,
-		}, setBranches, packfileRes.Packfile.Cid))
+		}, setBranches, packfileCid))
 	}
 	if len(setTags) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiSetTag(h.wallet.Address(), gitopiatypes.RepositoryId{
 			Id:   h.remoteRepository.Owner.Id,
 			Name: h.remoteRepository.Name,
-		}, setTags, packfileRes.Packfile.Cid))
+		}, setTags, packfileCid))
 	}
 	if len(deleteBranches) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiDeleteBranch(h.wallet.Address(), gitopiatypes.RepositoryId{
