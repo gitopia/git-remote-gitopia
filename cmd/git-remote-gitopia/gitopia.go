@@ -365,12 +365,9 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		}
 	}
 
-	packfileRes, err := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
+	packfileRes, _ := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
 		RepositoryId: h.remoteRepository.Id,
 	})
-	if err != nil {
-		return nil, err
-	}
 
 	var msg []sdk.Msg
 	if len(setBranches) > 0 {
