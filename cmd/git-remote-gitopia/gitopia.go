@@ -269,6 +269,14 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	var deleteBranches, deleteTags []string
 	var res []string
 
+	var packfileCid string
+	packfileRes, err := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
+		RepositoryId: h.remoteRepository.Id,
+	})
+	if err == nil {
+		packfileCid = packfileRes.Packfile.Cid
+	}
+
 	for _, ref := range refsToPush {
 		if ref.Local == "" {
 			if strings.HasPrefix(ref.Remote, branchPrefix) {
@@ -363,14 +371,6 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		} else {
 			return nil, fmt.Errorf("fatal: not a valid branch/tag, %v", ref.Local)
 		}
-	}
-
-	var packfileCid string
-	packfileRes, err := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
-		RepositoryId: h.remoteRepository.Id,
-	})
-	if err == nil {
-		packfileCid = packfileRes.Packfile.Cid
 	}
 
 	var msg []sdk.Msg
