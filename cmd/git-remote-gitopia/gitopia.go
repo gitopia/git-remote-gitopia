@@ -403,6 +403,29 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		remote.Logger.Println("Please sign the gitopia transaction on your ledger device.")
 	}
 
+	// Approve packfile update
+	packfileUpdateProposalRes, err := h.storageClient.PackfileUpdateProposal(context.Background(), &storagetypes.QueryPackfileUpdateProposalRequest{
+		RepositoryId: h.remoteRepository.Id,
+		User:         h.wallet.Address(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	msg = append(msg, storagetypes.NewMsgApproveRepositoryPackfileUpdate(h.wallet.Address(), packfileUpdateProposalRes.PackfileUpdateProposal.Id))
+
+	lfsObjectUpdateProposalRes, err := h.storageClient.LFSObjectUpdateProposal(context.Background(), &storagetypes.QueryLFSObjectUpdateProposalRequest{
+		RepositoryId: h.remoteRepository.Id,
+		User:         h.wallet.Address(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Approve LFS object update
+	for _, lfsObjectUpdateProposal := range lfsObjectUpdateProposalRes.LfsObjectProposal {
+		msg = append(msg, storagetypes.NewMsgApproveLFSObjectUpdate(h.wallet.Address(), lfsObjectUpdateProposal.Id))
+	}
+
 	if err := h.wallet.SignAndBroadcast(h.grpcConn, msg); err != nil {
 		return nil, err
 	}
