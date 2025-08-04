@@ -413,7 +413,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	}
 	msg = append(msg, storagetypes.NewMsgApproveRepositoryPackfileUpdate(h.wallet.Address(), packfileUpdateProposalRes.PackfileUpdateProposal.Id))
 
-	lfsObjectUpdateProposalRes, err := h.storageClient.LFSObjectUpdateProposal(context.Background(), &storagetypes.QueryLFSObjectUpdateProposalRequest{
+	lfsObjectUpdateProposalRes, err := h.storageClient.LFSObjectUpdateProposalsByRepositoryId(context.Background(), &storagetypes.QueryLFSObjectUpdateProposalsByRepositoryIdRequest{
 		RepositoryId: h.remoteRepository.Id,
 		User:         h.wallet.Address(),
 	})
@@ -422,7 +422,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	}
 
 	// Approve LFS object update
-	for _, lfsObjectUpdateProposal := range lfsObjectUpdateProposalRes.LfsObjectProposal {
+	for _, lfsObjectUpdateProposal := range lfsObjectUpdateProposalRes.LfsObjectProposals {
 		msg = append(msg, storagetypes.NewMsgApproveLFSObjectUpdate(h.wallet.Address(), lfsObjectUpdateProposal.Id))
 	}
 
