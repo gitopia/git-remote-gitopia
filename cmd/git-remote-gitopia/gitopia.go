@@ -263,13 +263,14 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	remoteURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
 	lfsURL := remoteURL // Use same URL for LFS
 
-	var newRemoteRefSha string
+	var pushRefspecs []string
+	var deleteBranches, deleteTags []string
 	var setBranches []gitopiatypes.MsgMultiSetBranch_Branch
 	var setTags []gitopiatypes.MsgMultiSetTag_Tag
-	var deleteBranches, deleteTags []string
-	var res []string
-
+	isForce := false
+	var res []string // To return the refs that were processed
 	var packfileCid string
+
 	packfileRes, err := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
 		RepositoryId: h.remoteRepository.Id,
 	})
@@ -277,33 +278,36 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		packfileCid = packfileRes.Packfile.Cid
 	}
 
+	// --- First Pass: Collect refspecs and deletions ---
 	for _, ref := range refsToPush {
-		if ref.Local == "" {
+		if ref.Local == "" { // This is a delete operation
 			if strings.HasPrefix(ref.Remote, branchPrefix) {
 				remoteBranchName := strings.TrimPrefix(ref.Remote, branchPrefix)
-
-				// Check if it's the default branch
 				if remoteBranchName == h.remoteRepository.DefaultBranch {
 					return nil, fmt.Errorf("fatal: cannot delete default branch, %v", remoteBranchName)
 				}
-
 				deleteBranches = append(deleteBranches, remoteBranchName)
 				res = append(res, ref.Remote)
-			} else if strings.HasPrefix(refsToPush[0].Remote, tagPrefix) {
-				remoteTagName := strings.TrimPrefix(refsToPush[0].Remote, tagPrefix)
+			} else if strings.HasPrefix(ref.Remote, tagPrefix) {
+				remoteTagName := strings.TrimPrefix(ref.Remote, tagPrefix)
 				deleteTags = append(deleteTags, remoteTagName)
 				res = append(res, ref.Remote)
 			}
-
 			continue
 		}
 
-		force := false
-		if strings.HasPrefix(ref.Local, "+") {
-			ref.Local = strings.TrimPrefix(ref.Local, "+")
-			force = true
+		// This is a create/update operation
+		localRef := ref.Local
+		if strings.HasPrefix(localRef, "+") {
+			localRef = strings.TrimPrefix(localRef, "+")
+			isForce = true
 		}
 
+		pushRefspecs = append(pushRefspecs, fmt.Sprintf("%s:%s", ref.Local, ref.Remote))
+	}
+
+	// --- Execute a single Git Push if there's anything to push ---
+	if len(pushRefspecs) > 0 {
 		if h.wallet.Type() == wallet.LEDGER {
 			remote.Logger.Println("Please sign the git server request on your ledger device.")
 		}
@@ -313,63 +317,82 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		if err != nil {
 			return nil, errors.Wrap(err, "error signing data")
 		}
-
 		credential := fmt.Sprintf("%s:%s", h.wallet.Address(), signature)
+
 		args := []string{
-			"-c",
-			fmt.Sprintf("http.extraheader=Authorization: Basic %s", base64.StdEncoding.EncodeToString([]byte(credential))),
-			"-c",
-			"credential.helper=",
-			"-c",
-			"credential.helper=gitopia",
-			"-c",
-			fmt.Sprintf("lfs.url=%s", lfsURL),
+			"-c", fmt.Sprintf("http.extraheader=Authorization: Basic %s", base64.StdEncoding.EncodeToString([]byte(credential))),
+			"-c", "credential.helper=",
+			"-c", "credential.helper=gitopia",
+			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
 			"push",
+			"--no-verify", // Keep this to prevent the double-hook call
 			remoteURL,
-			fmt.Sprintf("%s:%s", ref.Local, ref.Remote),
 		}
-		if force {
+
+		// Add all refspecs to the command
+		args = append(args, pushRefspecs...)
+
+		if isForce {
 			args = append(args, "--force")
 		}
+
 		cmd := core.GitCommand("git", args...)
 		if err := cmd.Run(); err != nil {
 			return nil, errors.Wrap(err, "error pushing to remote repository")
 		}
+	}
+
+	// --- Second Pass: Collect metadata for Gitopia transaction ---
+	for _, ref := range refsToPush {
+		if ref.Local == "" {
+			continue // Deletes already handled
+		}
+
+		localRef := ref.Local
+		if strings.HasPrefix(localRef, "+") {
+			localRef = strings.TrimPrefix(localRef, "+")
+		}
 
 		// Update ref on gitopia
-		if strings.HasPrefix(ref.Local, branchPrefix) {
-			localCommitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(ref.Local))
+		if strings.HasPrefix(localRef, branchPrefix) {
+			localCommitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(localRef))
 			if err != nil {
-				return nil, fmt.Errorf("fatal: local branch %s doesn't exist", ref.Local)
+				return nil, fmt.Errorf("fatal: local branch %s doesn't exist", localRef)
 			}
 
-			newRemoteRefSha = localCommitHash.String()
 			remoteBranchName := strings.TrimPrefix(ref.Remote, branchPrefix)
 			branch := gitopiatypes.MsgMultiSetBranch_Branch{
 				Name: remoteBranchName,
-				Sha:  newRemoteRefSha,
+				Sha:  localCommitHash.String(),
 			}
-
 			setBranches = append(setBranches, branch)
 			res = append(res, ref.Remote)
-		} else if strings.HasPrefix(ref.Local, tagPrefix) {
-			localTagName := strings.TrimPrefix(ref.Local, tagPrefix)
+		} else if strings.HasPrefix(localRef, tagPrefix) {
+			localTagName := strings.TrimPrefix(localRef, tagPrefix)
 			tagRef, err := remote.Repo.Tag(localTagName)
 			if err != nil {
-				return nil, fmt.Errorf("fatal: invalid tag name, %v", localTagName)
+				// Could be a lightweight tag, resolve revision instead
+				commitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(localRef))
+				if err != nil {
+					return nil, fmt.Errorf("fatal: invalid tag name or ref, %v", localTagName)
+				}
+				tag := gitopiatypes.MsgMultiSetTag_Tag{
+					Name: strings.TrimPrefix(ref.Remote, tagPrefix),
+					Sha:  commitHash.String(),
+				}
+				setTags = append(setTags, tag)
+			} else {
+				// Annotated tag
+				tag := gitopiatypes.MsgMultiSetTag_Tag{
+					Name: strings.TrimPrefix(ref.Remote, tagPrefix),
+					Sha:  tagRef.Hash().String(),
+				}
+				setTags = append(setTags, tag)
 			}
 
-			newRemoteRefSha = tagRef.Hash().String()
-			remoteTagName := strings.TrimPrefix(ref.Remote, tagPrefix)
-			tag := gitopiatypes.MsgMultiSetTag_Tag{
-				Name: remoteTagName,
-				Sha:  newRemoteRefSha,
-			}
-
-			setTags = append(setTags, tag)
 			res = append(res, ref.Remote)
 		} else {
-			return nil, fmt.Errorf("fatal: not a valid branch/tag, %v", ref.Local)
+			return nil, fmt.Errorf("fatal: invalid refspec, %v", ref)
 		}
 	}
 
@@ -444,7 +467,7 @@ func (h *GitopiaHandler) havePushPermission(walletAddress string) (havePermissio
 			DaoId: h.remoteRepository.Owner.Id,
 		})
 		if err != nil {
-			return havePermission, err
+			return havePermission, errors.Wrap(err, "error querying DAO members")
 		}
 
 		for _, member := range resp.Members {
