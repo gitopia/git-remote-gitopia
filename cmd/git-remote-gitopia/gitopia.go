@@ -98,6 +98,14 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 
 	h.remoteRepository = *res.Repository
 
+	// Configure LFS URL for clone operations to avoid SSH to non-existent "gitopia" hostname
+	lfsURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
+	cmd := core.GitCommand("git", "config", "--local", "lfs.url", lfsURL)
+	if err := cmd.Run(); err != nil {
+		// Log but don't fail if LFS config fails (repo might not have LFS)
+		remote.Logger.Printf("Warning: could not configure LFS URL: %v", err)
+	}
+
 	return nil
 }
 
@@ -139,9 +147,11 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 
 func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetch) error {
 	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
+	lfsURL := remoteURL // Use same URL for LFS
 
 	if !remote.Force {
 		args := []string{
+			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
 			"fetch",
 			"--no-write-fetch-head",
 			remoteURL,
@@ -165,6 +175,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 		}
 
 		args := []string{
+			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
 			"fetch",
 			"--no-write-fetch-head",
 			remoteURL,
@@ -215,6 +226,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 	}
 
 	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
+	lfsURL := remoteURL // Use same URL for LFS
 
 	var newRemoteRefSha string
 	var setBranches []gitopiatypes.MsgMultiSetBranch_Branch
@@ -267,6 +279,8 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			"credential.helper=",
 			"-c",
 			"credential.helper=gitopia",
+			"-c",
+			fmt.Sprintf("lfs.url=%s", lfsURL),
 			"push",
 			remoteURL,
 			fmt.Sprintf("%s:%s", ref.Local, ref.Remote),
