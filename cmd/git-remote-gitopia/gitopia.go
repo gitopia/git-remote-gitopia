@@ -149,45 +149,37 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
 	lfsURL := remoteURL // Use same URL for LFS
 
-	if !remote.Force {
-		args := []string{
-			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
-			"fetch",
-			"--no-write-fetch-head",
-			remoteURL,
+	// Check if any refs need force
+	needsForce := false
+	var processedRefs []string
+	
+	for _, ref := range refsToFetch {
+		refSpec := ref.Ref
+		if strings.HasPrefix(refSpec, "+") {
+			refSpec = strings.TrimPrefix(refSpec, "+")
+			needsForce = true
 		}
-		for _, ref := range refsToFetch {
-			args = append(args, ref.Ref)
-		}
-		cmd := core.GitCommand("git", args...)
-		if err := cmd.Run(); err != nil {
-			return errors.Wrap(err, "error fetching from remote repository")
-		}
-
-		return nil
+		processedRefs = append(processedRefs, refSpec)
 	}
 
-	for _, ref := range refsToFetch {
-		force := false
-		if strings.HasPrefix(ref.Ref, "+") {
-			ref.Ref = strings.TrimPrefix(ref.Ref, "+")
-			force = true
-		}
+	// Build single git fetch command with all refs
+	args := []string{
+		"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
+		"fetch",
+		"--no-write-fetch-head",
+	}
+	
+	// Add force flag if any ref needs it
+	if needsForce || remote.Force {
+		args = append(args, "--force")
+	}
+	
+	args = append(args, remoteURL)
+	args = append(args, processedRefs...)
 
-		args := []string{
-			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
-			"fetch",
-			"--no-write-fetch-head",
-			remoteURL,
-			ref.Ref,
-		}
-		if force {
-			args = append(args, "--force")
-		}
-		cmd := core.GitCommand("git", args...)
-		if err := cmd.Run(); err != nil {
-			return errors.Wrap(err, "error fetching from remote repository")
-		}
+	cmd := core.GitCommand("git", args...)
+	if err := cmd.Run(); err != nil {
+		return errors.Wrap(err, "error fetching from remote repository")
 	}
 
 	return nil
