@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -52,31 +53,47 @@ func CleanUpProcessGroup(cmd *exec.Cmd) {
 }
 
 func ValidateGitopiaRemoteURL(remoteURL string) (remoteUserId string, remoteRepositoryName string, err error) {
-	if strings.HasPrefix(remoteURL, GITOPIA_PREFIX) {
-		s := strings.TrimPrefix(remoteURL, GITOPIA_PREFIX)
-		sp := strings.Split(s, "/")
-
-		if len(sp) != 2 {
-			return "", "", ErrInvalidGitopiaRemoteURL
-		}
-		remoteUserId = sp[0]
-		remoteRepositoryName = sp[1]
-
-		_, err := sdk.AccAddressFromBech32(remoteUserId)
-		if err != nil {
-			if len(remoteUserId) < 3 || len(remoteUserId) > 39 {
-				return "", "", ErrInvalidGitopiaRemoteURL
-			}
-			valid, err := regexp.MatchString("^[a-zA-Z0-9]+(?:[-]?[a-zA-Z0-9])*$", remoteUserId)
-			if err != nil {
-				return "", "", ErrInvalidGitopiaRemoteURL
-			}
-			if !valid {
-				return "", "", ErrInvalidGitopiaRemoteURL
-			}
-		}
-		return remoteUserId, remoteRepositoryName, nil
+	if !strings.HasPrefix(remoteURL, GITOPIA_PREFIX) {
+		return "", "", fmt.Errorf("invalid gitopia remote url: must start with '%s', got '%s'", GITOPIA_PREFIX, remoteURL)
 	}
 
-	return "", "", ErrInvalidGitopiaRemoteURL
+	s := strings.TrimPrefix(remoteURL, GITOPIA_PREFIX)
+	sp := strings.Split(s, "/")
+
+	if len(sp) != 2 {
+		return "", "", fmt.Errorf("invalid gitopia remote url: expected format 'gitopia://user/repository', got '%s' (found %d parts after prefix)", remoteURL, len(sp))
+	}
+
+	remoteUserId = sp[0]
+	remoteRepositoryName = sp[1]
+
+	if remoteUserId == "" {
+		return "", "", fmt.Errorf("invalid gitopia remote url: user ID cannot be empty in '%s'", remoteURL)
+	}
+
+	if remoteRepositoryName == "" {
+		return "", "", fmt.Errorf("invalid gitopia remote url: repository name cannot be empty in '%s'", remoteURL)
+	}
+
+	// Try to parse as bech32 address first
+	_, err = sdk.AccAddressFromBech32(remoteUserId)
+	if err != nil {
+		// If not a valid bech32 address, validate as username
+		if len(remoteUserId) < 3 {
+			return "", "", fmt.Errorf("invalid gitopia remote url: user ID '%s' is too short (minimum 3 characters)", remoteUserId)
+		}
+		if len(remoteUserId) > 39 {
+			return "", "", fmt.Errorf("invalid gitopia remote url: user ID '%s' is too long (maximum 39 characters)", remoteUserId)
+		}
+		
+		valid, regexErr := regexp.MatchString("^[a-zA-Z0-9]+(?:[-]?[a-zA-Z0-9])*$", remoteUserId)
+		if regexErr != nil {
+			return "", "", fmt.Errorf("invalid gitopia remote url: error validating user ID '%s': %v", remoteUserId, regexErr)
+		}
+		if !valid {
+			return "", "", fmt.Errorf("invalid gitopia remote url: user ID '%s' contains invalid characters (only alphanumeric and hyphens allowed)", remoteUserId)
+		}
+	}
+
+	return remoteUserId, remoteRepositoryName, nil
 }
