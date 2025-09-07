@@ -122,8 +122,25 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 	if err != nil {
 		return out, err
 	}
+
+	// Track available branches and find a suitable HEAD candidate
+	var headCandidate string
+	defaultBranchExists := false
+
 	for _, branch := range branchAllRes.Branch {
 		out = append(out, fmt.Sprintf("%s %s%s", branch.Sha, branchPrefix, branch.Name))
+
+		// Check if the configured default branch exists
+		if branch.Name == h.remoteRepository.DefaultBranch {
+			defaultBranchExists = true
+			headCandidate = branch.Name
+		} else if headCandidate == "" {
+			// Fallback: use the first branch we find
+			headCandidate = branch.Name
+		} else if branch.Name == "main" {
+			// Prefer "main" over other branches as fallback
+			headCandidate = branch.Name
+		}
 	}
 
 	tagAllRes, err := h.queryClient.RepositoryTagAll(context.Background(), &gitopiatypes.QueryAllRepositoryTagRequest{
@@ -140,7 +157,18 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 		out = append(out, fmt.Sprintf("%s %s%s", tag.Sha, tagPrefix, tag.Name))
 	}
 
-	out = append(out, fmt.Sprintf("@refs/heads/%s HEAD", h.remoteRepository.DefaultBranch))
+	// Only set HEAD if we have a valid branch to point to
+	if headCandidate != "" {
+		if !defaultBranchExists && headCandidate != h.remoteRepository.DefaultBranch {
+			// Log a warning if we're falling back to a different branch
+			remote.Logger.Printf("Warning: configured default branch '%s' doesn't exist, using '%s' as HEAD\n",
+				h.remoteRepository.DefaultBranch, headCandidate)
+		}
+		out = append(out, fmt.Sprintf("@refs/heads/%s HEAD", headCandidate))
+	} else {
+		// No branches exist at all - this is a serious issue
+		remote.Logger.Printf("Warning: repository has no branches, HEAD will not be set\n")
+	}
 
 	return out, nil
 }
@@ -152,7 +180,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 	// Check if any refs need force
 	needsForce := false
 	var processedRefs []string
-	
+
 	for _, ref := range refsToFetch {
 		refSpec := ref.Ref
 		if strings.HasPrefix(refSpec, "+") {
@@ -168,12 +196,12 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 		"fetch",
 		"--no-write-fetch-head",
 	}
-	
+
 	// Add force flag if any ref needs it
 	if needsForce || remote.Force {
 		args = append(args, "--force")
 	}
-	
+
 	args = append(args, remoteURL)
 	args = append(args, processedRefs...)
 
