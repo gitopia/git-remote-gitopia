@@ -397,7 +397,7 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		if err != nil && strings.Contains(err.Error(), "packfile update proposal not found") {
 			// There is no change in packfile so set packfile cid to old_cid itself
 			packfileCid = packfileRes.Packfile.OldCid
-		} else {
+		} else if err != nil {
 			return nil, err
 		}
 		if packfileUpdateProposalRes != nil {
