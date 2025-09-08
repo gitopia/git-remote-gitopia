@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/cosmos/cosmos-sdk/client/keys"
-	"github.com/gitopia/git-remote-gitopia/cmd/git-gitopia/lfs"
 	"github.com/gitopia/gitopia-go"
 	"github.com/spf13/cobra"
 )
@@ -16,7 +15,6 @@ func RootCommand() *cobra.Command {
 		},
 	}
 	cmd.AddCommand(keys.Commands("."))
-	cmd.AddCommand(lfs.Commands())
 
 	return cmd
 }

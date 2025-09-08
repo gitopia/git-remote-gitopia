@@ -20,8 +20,9 @@ import (
 	core "github.com/gitopia/git-remote-gitopia/core"
 	"github.com/gitopia/git-remote-gitopia/core/api"
 	"github.com/gitopia/git-remote-gitopia/core/wallet"
-	gitopiatypes "github.com/gitopia/gitopia/v5/x/gitopia/types"
-	"github.com/gitopia/gitopia/v5/x/gitopia/utils"
+	gitopiatypes "github.com/gitopia/gitopia/v6/x/gitopia/types"
+	"github.com/gitopia/gitopia/v6/x/gitopia/utils"
+	storagetypes "github.com/gitopia/gitopia/v6/x/storage/types"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -41,6 +42,7 @@ type GitopiaHandler struct {
 	queryClient    gitopiatypes.QueryClient
 	feegrantClient feegrant.QueryClient
 	bankClient     banktypes.QueryClient
+	storageClient  storagetypes.QueryClient
 
 	chainId              string
 	remoteUserId         string
@@ -55,16 +57,40 @@ type GitopiaHandler struct {
 func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	var err error
 
+	// Check existing configuration
 	grpcHost, _ := config.GitConfigGet(config.GitopiaConfigGRPCHostOption)
 	tmAddr, _ := config.GitConfigGet(config.GitopiaConfigTmAddrOption)
+
+	// Validate and configure gRPC and RPC hosts
+	needsReconfiguration := false
 	if grpcHost == "" || tmAddr == "" || !api.CheckGRPCHostLiveness(grpcHost) || !api.CheckRPCHostLiveness(tmAddr) {
+		needsReconfiguration = true
+	}
+
+	if needsReconfiguration {
+		remote.Logger.Printf("Configuring Gitopia hosts...")
 		provider := api.GetBestApiProvider()
 		grpcHost = provider.GRPCHost
+		tmAddr = provider.TMAddr
+
 		if err := api.SetConfiguredGRPCHost(provider.GRPCHost); err != nil {
 			return err
 		}
+
 		if err := api.SetConfiguredTmAddr(provider.TMAddr); err != nil {
 			return err
+		}
+	}
+
+	// Check and configure Git server host
+	gitServerHost, _ := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
+
+	if gitServerHost == "" || !api.CheckGitServerHostLiveness(gitServerHost) {
+		gitServerHost = api.GetBestGitServerHost(grpcHost)
+		if gitServerHost != "" {
+			if err := api.SetConfiguredGitServerHost(gitServerHost); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -81,6 +107,7 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 	serviceClient := tmservice.NewServiceClient(h.grpcConn)
 	h.feegrantClient = feegrant.NewQueryClient(h.grpcConn)
 	h.bankClient = banktypes.NewQueryClient(h.grpcConn)
+	h.storageClient = storagetypes.NewQueryClient(h.grpcConn)
 
 	nodeInfoRes, err := serviceClient.GetNodeInfo(context.Background(), &tmservice.GetNodeInfoRequest{})
 	if err != nil {
@@ -93,10 +120,18 @@ func (h *GitopiaHandler) Initialize(remote *core.Remote) error {
 		RepositoryName: h.remoteRepositoryName,
 	})
 	if err != nil {
-		return err
+		return errors.Wrap(err, fmt.Sprintf("error getting repository %s/%s", h.remoteUserId, h.remoteRepositoryName))
 	}
 
 	h.remoteRepository = *res.Repository
+
+	// Configure LFS URL for clone operations to avoid SSH to non-existent "gitopia" hostname
+	lfsURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
+	cmd := core.GitCommand("git", "config", "--local", "lfs.url", lfsURL)
+	if err := cmd.Run(); err != nil {
+		// Log but don't fail if LFS config fails (repo might not have LFS)
+		remote.Logger.Printf("Warning: could not configure LFS URL: %v", err)
+	}
 
 	return nil
 }
@@ -138,10 +173,16 @@ func (h *GitopiaHandler) List(remote *core.Remote, forPush bool) ([]string, erro
 }
 
 func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetch) error {
-	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
+	gitServerHost, err := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
+	if err != nil {
+		return err
+	}
+	remoteURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
+	lfsURL := remoteURL // Use same URL for LFS
 
 	if !remote.Force {
 		args := []string{
+			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
 			"fetch",
 			"--no-write-fetch-head",
 			remoteURL,
@@ -165,6 +206,7 @@ func (h *GitopiaHandler) Fetch(remote *core.Remote, refsToFetch []core.RefToFetc
 		}
 
 		args := []string{
+			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
 			"fetch",
 			"--no-write-fetch-head",
 			remoteURL,
@@ -214,41 +256,102 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, fmt.Errorf("fatal: you don't have write permissions to this repository")
 	}
 
-	remoteURL := fmt.Sprintf("%v/%v.git", config.GitServerHost, h.remoteRepository.Id)
+	gitServerHost, err := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
+	if err != nil {
+		return nil, err
+	}
+	remoteURL := fmt.Sprintf("%v/%v.git", gitServerHost, h.remoteRepository.Id)
+	lfsURL := remoteURL // Use same URL for LFS
 
-	var newRemoteRefSha string
+	var allRefspecs []string
 	var setBranches []gitopiatypes.MsgMultiSetBranch_Branch
 	var setTags []gitopiatypes.MsgMultiSetTag_Tag
 	var deleteBranches, deleteTags []string
+	isForce := false
 	var res []string
+	var packfileCid string
 
+	packfileRes, err := h.storageClient.RepositoryPackfile(context.Background(), &storagetypes.QueryRepositoryPackfileRequest{
+		RepositoryId: h.remoteRepository.Id,
+	})
+	if err == nil {
+		packfileCid = packfileRes.Packfile.Cid
+	}
+
+	// --- First Pass: Collect all refspecs and metadata ---
 	for _, ref := range refsToPush {
-		if ref.Local == "" {
+		if ref.Local == "" { // This is a delete operation
+			var refNameToDelete string
 			if strings.HasPrefix(ref.Remote, branchPrefix) {
-				remoteBranchName := strings.TrimPrefix(ref.Remote, branchPrefix)
-
-				// Check if it's the default branch
-				if remoteBranchName == h.remoteRepository.DefaultBranch {
-					return nil, fmt.Errorf("fatal: cannot delete default branch, %v", remoteBranchName)
-				}
-
-				deleteBranches = append(deleteBranches, remoteBranchName)
-				res = append(res, ref.Remote)
-			} else if strings.HasPrefix(refsToPush[0].Remote, tagPrefix) {
-				remoteTagName := strings.TrimPrefix(refsToPush[0].Remote, tagPrefix)
-				deleteTags = append(deleteTags, remoteTagName)
-				res = append(res, ref.Remote)
+				refNameToDelete = strings.TrimPrefix(ref.Remote, branchPrefix)
+				deleteBranches = append(deleteBranches, refNameToDelete)
+			} else if strings.HasPrefix(ref.Remote, tagPrefix) {
+				refNameToDelete = strings.TrimPrefix(ref.Remote, tagPrefix)
+				deleteTags = append(deleteTags, refNameToDelete)
+			} else {
+				continue // Skip unknown ref types
 			}
 
+			// Add to the list of commands for the git server
+			// The syntax for delete is ":<refname>"
+			allRefspecs = append(allRefspecs, ":"+ref.Remote)
+			res = append(res, ref.Remote)
 			continue
 		}
 
-		force := false
-		if strings.HasPrefix(ref.Local, "+") {
-			ref.Local = strings.TrimPrefix(ref.Local, "+")
-			force = true
+		// This is a create/update operation
+		localRef := ref.Local
+		if strings.HasPrefix(localRef, "+") {
+			localRef = strings.TrimPrefix(localRef, "+")
+			isForce = true
 		}
 
+		// Add to the list of commands for the git server
+		allRefspecs = append(allRefspecs, fmt.Sprintf("%s:%s", ref.Local, ref.Remote))
+
+		// Collect metadata for the blockchain transaction
+		if strings.HasPrefix(localRef, branchPrefix) {
+			localCommitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(localRef))
+			if err != nil {
+				return nil, fmt.Errorf("fatal: local branch %s doesn't exist", localRef)
+			}
+
+			remoteBranchName := strings.TrimPrefix(ref.Remote, branchPrefix)
+			branch := gitopiatypes.MsgMultiSetBranch_Branch{
+				Name: remoteBranchName,
+				Sha:  localCommitHash.String(),
+			}
+			setBranches = append(setBranches, branch)
+			res = append(res, ref.Remote)
+		} else if strings.HasPrefix(localRef, tagPrefix) {
+			localTagName := strings.TrimPrefix(localRef, tagPrefix)
+			tagRef, err := remote.Repo.Tag(localTagName)
+			if err != nil {
+				// Could be a lightweight tag, resolve revision instead
+				commitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(localRef))
+				if err != nil {
+					return nil, fmt.Errorf("fatal: invalid tag name or ref, %v", localTagName)
+				}
+				tag := gitopiatypes.MsgMultiSetTag_Tag{
+					Name: strings.TrimPrefix(ref.Remote, tagPrefix),
+					Sha:  commitHash.String(),
+				}
+				setTags = append(setTags, tag)
+			} else {
+				// Annotated tag
+				tag := gitopiatypes.MsgMultiSetTag_Tag{
+					Name: strings.TrimPrefix(ref.Remote, tagPrefix),
+					Sha:  tagRef.Hash().String(),
+				}
+				setTags = append(setTags, tag)
+			}
+
+			res = append(res, ref.Remote)
+		}
+	}
+
+	// --- Execute a single Git Push if there's anything to do ---
+	if len(allRefspecs) > 0 {
 		if h.wallet.Type() == wallet.LEDGER {
 			remote.Logger.Println("Please sign the git server request on your ledger device.")
 		}
@@ -258,77 +361,69 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		if err != nil {
 			return nil, errors.Wrap(err, "error signing data")
 		}
-
 		credential := fmt.Sprintf("%s:%s", h.wallet.Address(), signature)
+
 		args := []string{
-			"-c",
-			fmt.Sprintf("http.extraheader=Authorization: Basic %s", base64.StdEncoding.EncodeToString([]byte(credential))),
-			"-c",
-			"credential.helper=",
-			"-c",
-			"credential.helper=gitopia",
+			"-c", fmt.Sprintf("http.extraheader=Authorization: Basic %s", base64.StdEncoding.EncodeToString([]byte(credential))),
+			"-c", "credential.helper=",
+			"-c", "credential.helper=gitopia",
+			"-c", fmt.Sprintf("lfs.url=%s", lfsURL),
 			"push",
+			"--no-verify", // Keep this to prevent the double-hook call
 			remoteURL,
-			fmt.Sprintf("%s:%s", ref.Local, ref.Remote),
 		}
-		if force {
+
+		args = append(args, allRefspecs...)
+
+		if isForce {
 			args = append(args, "--force")
 		}
+
 		cmd := core.GitCommand("git", args...)
 		if err := cmd.Run(); err != nil {
 			return nil, errors.Wrap(err, "error pushing to remote repository")
-		}
-
-		// Update ref on gitopia
-		if strings.HasPrefix(ref.Local, branchPrefix) {
-			localCommitHash, err := remote.Repo.ResolveRevision(plumbing.Revision(ref.Local))
-			if err != nil {
-				return nil, fmt.Errorf("fatal: local branch %s doesn't exist", ref.Local)
-			}
-
-			newRemoteRefSha = localCommitHash.String()
-			remoteBranchName := strings.TrimPrefix(ref.Remote, branchPrefix)
-			branch := gitopiatypes.MsgMultiSetBranch_Branch{
-				Name: remoteBranchName,
-				Sha:  newRemoteRefSha,
-			}
-
-			setBranches = append(setBranches, branch)
-			res = append(res, ref.Remote)
-		} else if strings.HasPrefix(ref.Local, tagPrefix) {
-			localTagName := strings.TrimPrefix(ref.Local, tagPrefix)
-			tagRef, err := remote.Repo.Tag(localTagName)
-			if err != nil {
-				return nil, fmt.Errorf("fatal: invalid tag name, %v", localTagName)
-			}
-
-			newRemoteRefSha = tagRef.Hash().String()
-			remoteTagName := strings.TrimPrefix(ref.Remote, tagPrefix)
-			tag := gitopiatypes.MsgMultiSetTag_Tag{
-				Name: remoteTagName,
-				Sha:  newRemoteRefSha,
-			}
-
-			setTags = append(setTags, tag)
-			res = append(res, ref.Remote)
-		} else {
-			return nil, fmt.Errorf("fatal: not a valid branch/tag, %v", ref.Local)
 		}
 	}
 
 	var msg []sdk.Msg
 
+	// Only try to approve packfile/LFS updates if we actually pushed something.
+	if len(allRefspecs) > 0 {
+		// Approve packfile update
+		packfileUpdateProposalRes, err := h.storageClient.PackfileUpdateProposal(context.Background(), &storagetypes.QueryPackfileUpdateProposalRequest{
+			RepositoryId: h.remoteRepository.Id,
+			User:         h.wallet.Address(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		msg = append(msg, storagetypes.NewMsgApproveRepositoryPackfileUpdate(h.wallet.Address(), packfileUpdateProposalRes.PackfileUpdateProposal.Id))
+
+		lfsObjectUpdateProposalRes, err := h.storageClient.LFSObjectUpdateProposalsByRepositoryId(context.Background(), &storagetypes.QueryLFSObjectUpdateProposalsByRepositoryIdRequest{
+			RepositoryId: h.remoteRepository.Id,
+			User:         h.wallet.Address(),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// Approve LFS object update
+		for _, lfsObjectUpdateProposal := range lfsObjectUpdateProposalRes.LfsObjectProposals {
+			msg = append(msg, storagetypes.NewMsgApproveLFSObjectUpdate(h.wallet.Address(), lfsObjectUpdateProposal.Id))
+		}
+	}
+
 	if len(setBranches) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiSetBranch(h.wallet.Address(), gitopiatypes.RepositoryId{
 			Id:   h.remoteRepository.Owner.Id,
 			Name: h.remoteRepository.Name,
-		}, setBranches))
+		}, setBranches, packfileCid))
 	}
 	if len(setTags) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiSetTag(h.wallet.Address(), gitopiatypes.RepositoryId{
 			Id:   h.remoteRepository.Owner.Id,
 			Name: h.remoteRepository.Name,
-		}, setTags))
+		}, setTags, packfileCid))
 	}
 	if len(deleteBranches) > 0 {
 		msg = append(msg, gitopiatypes.NewMsgMultiDeleteBranch(h.wallet.Address(), gitopiatypes.RepositoryId{
@@ -341,6 +436,12 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			Id:   h.remoteRepository.Owner.Id,
 			Name: h.remoteRepository.Name,
 		}, deleteTags))
+	}
+
+	// Make sure we don't send an empty transaction
+	if len(msg) == 0 {
+		remote.Logger.Println("Nothing to update on Gitopia.")
+		return res, nil
 	}
 
 	if h.wallet.Type() == wallet.LEDGER {
@@ -364,7 +465,7 @@ func (h *GitopiaHandler) havePushPermission(walletAddress string) (havePermissio
 			DaoId: h.remoteRepository.Owner.Id,
 		})
 		if err != nil {
-			return havePermission, err
+			return havePermission, errors.Wrap(err, "error querying DAO members")
 		}
 
 		for _, member := range resp.Members {

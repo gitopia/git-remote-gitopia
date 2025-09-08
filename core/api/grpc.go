@@ -6,6 +6,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/client/grpc/tmservice"
 	"github.com/gitopia/git-remote-gitopia/core"
+	storagetypes "github.com/gitopia/gitopia/v6/x/storage/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -49,4 +50,19 @@ func checkGRPCHostLatency(host string) time.Duration {
 func SetConfiguredGRPCHost(host string) error {
 	cmd := core.GitCommand("git", "config", "--global", "gitopia.grpcHost", host)
 	return cmd.Run()
+}
+
+func GetActiveStorageProviders(host string) []storagetypes.Provider {
+	conn, err := grpc.Dial(host, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil
+	}
+	defer conn.Close()
+
+	client := storagetypes.NewQueryClient(conn)
+	res, err := client.ActiveProviders(context.Background(), &storagetypes.QueryActiveProvidersRequest{})
+	if err != nil {
+		return nil
+	}
+	return res.Providers
 }

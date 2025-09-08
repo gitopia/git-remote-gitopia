@@ -36,9 +36,6 @@ func LoadGitConfig() error {
 	if res, err := GitConfigGet(GitopiaConfigChainIdOption); err == nil {
 		ChainId = res
 	}
-	if res, err := GitConfigGet(GitopiaConfigGitServerHostOption); err == nil {
-		GitServerHost = res
-	}
 	if res, err := GitConfigGet(GitopiaConfigGasPricesOption); err == nil {
 		GasPrices = res
 	}

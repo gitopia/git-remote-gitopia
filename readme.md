@@ -26,7 +26,7 @@ sudo mv /tmp/tmpinstalldir/git-remote-gitopia /usr/local/bin/
 
 ## Building
 
-Building `git-remote-gitopia` requires [Go 1.18+](https://golang.org/dl/).
+Building `git-remote-gitopia` requires [Go 1.21+](https://golang.org/dl/).
 
 ```
 make install
@@ -51,23 +51,10 @@ export GITOPIA_WALLET=/path/to/wallet.json
 
 ## Custom Endpoint Configuration Example
 
-### Testnet
 ```
 git config --global gitopia.chainId "gitopia"
-git config --global gitopia.grpcHost "localhost:9090"
-git config --global gitopia.gitServerHost "http://localhost:5001"
-git config --global gitopia.tmAddr "http://localhost:26657"
-git config --global gitopia.gasPrices "0.001ulore"
-git config --global gitopia.feeGranter ""
-git config --global gitopia.denom "ulore"
-```
-
-### Mainnet
-```
-git config --global gitopia.chainId "gitopia"
-git config --global gitopia.grpcHost "grpc.gitopia.com:9090"
-git config --global gitopia.gitServerHost "https://server.gitopia.com"
-git config --global gitopia.tmAddr "https://rpc.gitopia.com:443"
+git config --global gitopia.grpcHost "gitopia-grpc.polkachu.com:11390"
+git config --global gitopia.tmAddr "https://gitopia-rpc.polkachu.com:443"
 git config --global gitopia.gasPrices "0.001ulore"
 git config --global gitopia.feeGranter "gitopia13ashgc6j5xle4m47kqyn5psavq0u3klmscfxql"
 git config --global gitopia.denom "ulore"
