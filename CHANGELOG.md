@@ -2,6 +2,10 @@
 
 All notable changes will be documented here.
 
+## [v2.0.1] - 2025-09-08
+
+- handle the cases when there is only ref update on chain
+
 ## [v2.0.0] - 2025-09-08
 
 - upgrade gitopia version to v6.0.0 and gitopia-go version to v0.7.0

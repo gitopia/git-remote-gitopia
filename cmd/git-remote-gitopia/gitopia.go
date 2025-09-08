@@ -389,28 +389,38 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 
 	// Only try to approve packfile/LFS updates if we actually pushed something.
 	if len(allRefspecs) > 0 {
-		// Approve packfile update
+		// Try to approve packfile update if proposal exists
 		packfileUpdateProposalRes, err := h.storageClient.PackfileUpdateProposal(context.Background(), &storagetypes.QueryPackfileUpdateProposalRequest{
 			RepositoryId: h.remoteRepository.Id,
 			User:         h.wallet.Address(),
 		})
-		if err != nil {
+		if err != nil && strings.Contains(err.Error(), "packfile update proposal not found") {
+			// There is no change in packfile so set packfile cid to old_cid itself
+			packfileCid = packfileRes.Packfile.OldCid
+		} else if err != nil {
 			return nil, err
 		}
-		msg = append(msg, storagetypes.NewMsgApproveRepositoryPackfileUpdate(h.wallet.Address(), packfileUpdateProposalRes.PackfileUpdateProposal.Id))
+		if packfileUpdateProposalRes != nil {
+			// Packfile update proposal exists, approve it
+			msg = append(msg, storagetypes.NewMsgApproveRepositoryPackfileUpdate(h.wallet.Address(), packfileUpdateProposalRes.PackfileUpdateProposal.Id))
+		}
+		// If error occurs (e.g., proposal not found), continue without failing
+		// This handles cases like tag pushes where objects already exist
 
 		lfsObjectUpdateProposalRes, err := h.storageClient.LFSObjectUpdateProposalsByRepositoryId(context.Background(), &storagetypes.QueryLFSObjectUpdateProposalsByRepositoryIdRequest{
 			RepositoryId: h.remoteRepository.Id,
 			User:         h.wallet.Address(),
 		})
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), "lfs object update proposal not found") {
 			return nil, err
 		}
-
-		// Approve LFS object update
-		for _, lfsObjectUpdateProposal := range lfsObjectUpdateProposalRes.LfsObjectProposals {
-			msg = append(msg, storagetypes.NewMsgApproveLFSObjectUpdate(h.wallet.Address(), lfsObjectUpdateProposal.Id))
+		if lfsObjectUpdateProposalRes != nil {
+			// Approve LFS object updates if proposals exist
+			for _, lfsObjectUpdateProposal := range lfsObjectUpdateProposalRes.LfsObjectProposals {
+				msg = append(msg, storagetypes.NewMsgApproveLFSObjectUpdate(h.wallet.Address(), lfsObjectUpdateProposal.Id))
+			}
 		}
+		// If error occurs (e.g., no LFS proposals), continue without failing
 	}
 
 	if len(setBranches) > 0 {
