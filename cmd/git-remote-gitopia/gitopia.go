@@ -256,6 +256,18 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, fmt.Errorf("fatal: you don't have write permissions to this repository")
 	}
 
+	// Check for existing pending packfile update proposal
+	_, err = h.storageClient.PackfileUpdateProposal(context.Background(), &storagetypes.QueryPackfileUpdateProposalRequest{
+		RepositoryId: h.remoteRepository.Id,
+		User:         h.wallet.Address(),
+	})
+	if err == nil {
+		return nil, fmt.Errorf("fatal: there is already a pending packfile update proposal for this repository. Please wait for it to be processed before pushing again")
+	}
+	if !strings.Contains(err.Error(), "packfile update proposal not found") {
+		return nil, fmt.Errorf("error checking for pending proposals: %v", err)
+	}
+
 	gitServerHost, err := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
 	if err != nil {
 		return nil, err
