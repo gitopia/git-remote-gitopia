@@ -2,6 +2,19 @@
 
 All notable changes will be documented here.
 
+## [v2.0.0] - 2025-09-08
+
+- upgrade gitopia version to v6.0.0 and gitopia-go version to v0.7.0
+- automatic selection of storage provider with the least latency
+- add liveness check for storage providers and remove gitserver host from default config
+- handle lfs url config using inline configuration removing .lfsconfig dependency
+- fix clone of lfs repositories
+- minimal logging improvements and redirect git command stdout to stderr to avoid protocol issues
+- pass current state of repository packfile in set branch and tag requests
+- approve packfile update and lfs object updates in remote helper
+- prevent duplicate git hooks calls inside remote helper and improve code to do single push instead of multiple push calls for each ref update
+- git push request now goes to storage provider even for delete branch or tag operations
+
 ## [v1.10.0] - 2024-12-02
 
 - upgrade gitopia version to v5.1.0
