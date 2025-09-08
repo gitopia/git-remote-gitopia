@@ -26,7 +26,7 @@ sudo mv /tmp/tmpinstalldir/git-remote-gitopia /usr/local/bin/
 
 ## Building
 
-Building `git-remote-gitopia` requires [Go 1.18+](https://golang.org/dl/).
+Building `git-remote-gitopia` requires [Go 1.21+](https://golang.org/dl/).
 
 ```
 make install
