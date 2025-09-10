@@ -1,4 +1,4 @@
-GITOPIA_ENV ?= testing
+GITOPIA_ENV ?= prod
 LEDGER_ENABLED ?= true
 
 build_tags = netgo
@@ -42,7 +42,7 @@ zip = cd build && zip $(appname)_$(version)_$(1)_$(2).zip $(appname)$(3) git-git
 
 .PHONY: build
 
-all: darwin linux git_release_tar_gz git_release_zip
+all: darwin git_release_tar_gz git_release_zip
 
 clean:
 	rm -rf build/
