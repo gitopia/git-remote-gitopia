@@ -1,4 +1,4 @@
-GITOPIA_ENV ?= testing
+GITOPIA_ENV ?= prod
 LEDGER_ENABLED ?= true
 
 build_tags = netgo

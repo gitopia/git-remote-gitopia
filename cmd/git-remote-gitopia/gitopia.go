@@ -256,6 +256,18 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 		return nil, fmt.Errorf("fatal: you don't have write permissions to this repository")
 	}
 
+	// Check for existing pending packfile update proposal
+	_, err = h.storageClient.PackfileUpdateProposal(context.Background(), &storagetypes.QueryPackfileUpdateProposalRequest{
+		RepositoryId: h.remoteRepository.Id,
+		User:         h.wallet.Address(),
+	})
+	if err == nil {
+		return nil, fmt.Errorf("fatal: there is already a pending packfile update proposal for this repository. Please wait for it to be processed or expired before pushing again")
+	}
+	if !strings.Contains(err.Error(), "packfile update proposal not found") {
+		return nil, fmt.Errorf("error checking for pending proposals: %v", err)
+	}
+
 	gitServerHost, err := config.GitConfigGet(config.GitopiaConfigGitServerHostOption)
 	if err != nil {
 		return nil, err
@@ -394,24 +406,19 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 			RepositoryId: h.remoteRepository.Id,
 			User:         h.wallet.Address(),
 		})
-		if err != nil && strings.Contains(err.Error(), "packfile update proposal not found") {
-			// There is no change in packfile so set packfile cid to old_cid itself
-			packfileCid = packfileRes.Packfile.OldCid
-		} else if err != nil {
+		if err != nil {
 			return nil, err
 		}
 		if packfileUpdateProposalRes != nil {
 			// Packfile update proposal exists, approve it
 			msg = append(msg, storagetypes.NewMsgApproveRepositoryPackfileUpdate(h.wallet.Address(), packfileUpdateProposalRes.PackfileUpdateProposal.Id))
 		}
-		// If error occurs (e.g., proposal not found), continue without failing
-		// This handles cases like tag pushes where objects already exist
 
 		lfsObjectUpdateProposalRes, err := h.storageClient.LFSObjectUpdateProposalsByRepositoryId(context.Background(), &storagetypes.QueryLFSObjectUpdateProposalsByRepositoryIdRequest{
 			RepositoryId: h.remoteRepository.Id,
 			User:         h.wallet.Address(),
 		})
-		if err != nil && !strings.Contains(err.Error(), "lfs object update proposal not found") {
+		if err != nil {
 			return nil, err
 		}
 		if lfsObjectUpdateProposalRes != nil {
@@ -420,7 +427,6 @@ func (h *GitopiaHandler) Push(remote *core.Remote, refsToPush []core.RefToPush) 
 				msg = append(msg, storagetypes.NewMsgApproveLFSObjectUpdate(h.wallet.Address(), lfsObjectUpdateProposal.Id))
 			}
 		}
-		// If error occurs (e.g., no LFS proposals), continue without failing
 	}
 
 	if len(setBranches) > 0 {
