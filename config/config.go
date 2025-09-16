@@ -7,17 +7,18 @@ import (
 )
 
 const (
-	AppName                          = "git-remote-gitopia"
-	GitopiaConfigSection             = "gitopia"
-	GitopiaConfigChainIdOption       = "chainId"
-	GitopiaConfigGRPCHostOption      = "grpcHost"
-	GitopiaConfigTmAddrOption        = "tmAddr"
-	GitopiaConfigGitServerHostOption = "gitServerHost"
-	GitopiaConfigKeyOption           = "key"
-	GitopiaConfigBackendOption       = "backend"
-	GitopiaConfigGasPricesOption     = "gasPrices"
-	GitopiaConfigFeeGranterOption    = "feeGranter"
-	GitopiaConfigDenomOption         = "denom"
+	AppName                             = "git-remote-gitopia"
+	GitopiaConfigSection                = "gitopia"
+	GitopiaConfigChainIdOption          = "chainId"
+	GitopiaConfigGRPCHostOption         = "grpcHost"
+	GitopiaConfigTmAddrOption           = "tmAddr"
+	GitopiaConfigGitServerHostOption    = "gitServerHost"
+	GitopiaConfigKeyOption              = "key"
+	GitopiaConfigBackendOption          = "backend"
+	GitopiaConfigGasPricesOption        = "gasPrices"
+	GitopiaConfigFeeGranterOption       = "feeGranter"
+	GitopiaConfigDenomOption            = "denom"
+	GitopiaConfigFallbackProviderOption = "fallbackProvider"
 )
 
 func GitConfigGet(key string) (string, error) {
@@ -44,6 +45,9 @@ func LoadGitConfig() error {
 	}
 	if res, err := GitConfigGet(GitopiaConfigDenomOption); err == nil {
 		Denom = res
+	}
+	if res, err := GitConfigGet(GitopiaConfigFallbackProviderOption); err == nil {
+		FallbackProvider = res
 	}
 	return nil
 }

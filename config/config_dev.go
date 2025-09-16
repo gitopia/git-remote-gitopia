@@ -3,8 +3,9 @@
 package config
 
 var (
-	ChainId        = "gitopia"
-	GasPrices      = "0.001ulore"
-	FeeGranterAddr = ""
-	Denom          = "ulore"
+	ChainId          = "gitopia"
+	GasPrices        = "0.001ulore"
+	FeeGranterAddr   = ""
+	Denom            = "ulore"
+	FallbackProvider = ""
 )

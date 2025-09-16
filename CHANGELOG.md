@@ -2,6 +2,10 @@
 
 All notable changes will be documented here.
 
+## [v2.1.1] - 2025-09-16
+
+- use fallback provider address when all providers are jailed
+
 ## [v2.1.0] - 2025-09-12
 
 - don't attempt to push if there is already a pending packfile update proposal

@@ -66,3 +66,20 @@ func GetActiveStorageProviders(host string) []storagetypes.Provider {
 	}
 	return res.Providers
 }
+
+func GetStorageProvider(host, address string) storagetypes.Provider {
+	conn, err := grpc.Dial(host, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return storagetypes.Provider{}
+	}
+	defer conn.Close()
+
+	client := storagetypes.NewQueryClient(conn)
+	res, err := client.Provider(context.Background(), &storagetypes.QueryProviderRequest{
+		Address: address,
+	})
+	if err != nil {
+		return storagetypes.Provider{}
+	}
+	return res.Provider
+}
