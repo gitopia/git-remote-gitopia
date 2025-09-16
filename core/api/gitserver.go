@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gitopia/git-remote-gitopia/config"
 	"github.com/gitopia/git-remote-gitopia/core"
 )
 
@@ -29,7 +30,8 @@ func checkHttpHostLatency(host string) time.Duration {
 func GetBestGitServerHost(grpcHost string) string {
 	providers := GetActiveStorageProviders(grpcHost)
 	if len(providers) == 0 {
-		return ""
+		// No active providers found, use fallback provider if configured
+		return GetFallbackProviderHost(grpcHost)
 	}
 
 	var bestHost string
@@ -44,6 +46,17 @@ func GetBestGitServerHost(grpcHost string) string {
 	}
 
 	return bestHost
+}
+
+// GetFallbackProviderHost queries for the fallback provider's API URL using the given gRPC host
+func GetFallbackProviderHost(grpcHost string) string {
+	if config.FallbackProvider != "" {
+		provider := GetStorageProvider(grpcHost, config.FallbackProvider)
+		if provider.ApiUrl != "" {
+			return provider.ApiUrl
+		}
+	}
+	return ""
 }
 
 func SetConfiguredGitServerHost(host string) error {
